@@ -1,0 +1,56 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import Login from './pages/auth/Login'
+import AdminLayout from './components/common/AdminLayout'
+import Dashboard from './pages/admin/Dashboard'
+
+function ComingSoon({ title }) {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <div className="text-center">
+        <p className="text-2xl font-bold text-gray-300 mb-2">{title}</p>
+        <p className="text-gray-400 text-sm">Coming soon</p>
+      </div>
+    </div>
+  )
+}
+
+function AdminPage({ children, title }) {
+  return (
+    <AdminLayout>
+      {children || <ComingSoon title={title} />}
+    </AdminLayout>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/customer/login" element={<ComingSoon title="Customer Login" />} />
+
+        {/* Admin Routes */}
+        <Route path="/admin/dashboard" element={<AdminPage><Dashboard /></AdminPage>} />
+        <Route path="/admin/pos" element={<AdminPage title="POS / New Sale" />} />
+        <Route path="/admin/sales" element={<AdminPage title="Sales History" />} />
+        <Route path="/admin/cart" element={<AdminPage title="Loose Cart" />} />
+        <Route path="/admin/products" element={<AdminPage title="Products" />} />
+        <Route path="/admin/stock" element={<AdminPage title="Stock" />} />
+        <Route path="/admin/suppliers" element={<AdminPage title="Suppliers" />} />
+        <Route path="/admin/chicks/varieties" element={<AdminPage title="Chick Varieties" />} />
+        <Route path="/admin/chicks/schedules" element={<AdminPage title="Delivery Schedules" />} />
+        <Route path="/admin/chicks/bookings" element={<AdminPage title="Chick Bookings" />} />
+        <Route path="/admin/customers" element={<AdminPage title="Customers" />} />
+        <Route path="/admin/staff" element={<AdminPage title="Staff" />} />
+        <Route path="/admin/credit" element={<AdminPage title="Credit & Debt" />} />
+        <Route path="/admin/branches" element={<AdminPage title="Branches" />} />
+        <Route path="/admin/expenses" element={<AdminPage title="Expenses" />} />
+        <Route path="/admin/reports" element={<AdminPage title="Reports" />} />
+        <Route path="/admin/settings" element={<AdminPage title="Settings" />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+export default App
