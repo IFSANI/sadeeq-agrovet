@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/auth/Login'
 import AdminLayout from './components/common/AdminLayout'
 import Dashboard from './pages/admin/Dashboard'
+import POS from './pages/admin/POS'
+import Products from './pages/admin/Products'
 
 function ComingSoon({ title }) {
   return (
@@ -32,10 +34,10 @@ function App() {
 
         {/* Admin Routes */}
         <Route path="/admin/dashboard" element={<AdminPage><Dashboard /></AdminPage>} />
-        <Route path="/admin/pos" element={<AdminPage title="POS / New Sale" />} />
+        
         <Route path="/admin/sales" element={<AdminPage title="Sales History" />} />
         <Route path="/admin/cart" element={<AdminPage title="Loose Cart" />} />
-        <Route path="/admin/products" element={<AdminPage title="Products" />} />
+        
         <Route path="/admin/stock" element={<AdminPage title="Stock" />} />
         <Route path="/admin/suppliers" element={<AdminPage title="Suppliers" />} />
         <Route path="/admin/chicks/varieties" element={<AdminPage title="Chick Varieties" />} />
@@ -48,6 +50,9 @@ function App() {
         <Route path="/admin/expenses" element={<AdminPage title="Expenses" />} />
         <Route path="/admin/reports" element={<AdminPage title="Reports" />} />
         <Route path="/admin/settings" element={<AdminPage title="Settings" />} />
+        <Route path="/admin/pos" element={<AdminPage><POS /></AdminPage>} />
+        <Route path="/admin/products" element={<AdminPage><Products /></AdminPage>} />
+
       </Routes>
     </BrowserRouter>
   )

@@ -8,6 +8,11 @@ import branchRoutes from '../routes/branches.js'
 import productRoutes from '../routes/products.js'
 import stockRoutes from '../routes/stock.js'
 import supplierRoutes from '../routes/suppliers.js'
+import salesRoutes from '../routes/sales.js'
+import paymentRoutes from '../routes/payments.js'
+import cartRoutes from '../routes/carts.js'
+import chickRoutes from '../routes/chicks.js'
+import settingsRoutes from '../routes/settings.js'
 
 const app = express()
 app.use(cors())
@@ -20,5 +25,10 @@ app.use('/api/branches', branchRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/stock', stockRoutes)
 app.use('/api/suppliers', supplierRoutes)
+app.use('/api/sales', salesRoutes)
+app.use('/api/payments', paymentRoutes)
+app.use('/api/carts', cartRoutes)
+app.use('/api/chicks', chickRoutes)
+app.use('/api/settings', settingsRoutes)
 
 export default app
