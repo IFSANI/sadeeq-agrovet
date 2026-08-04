@@ -156,5 +156,24 @@ router.post('/:id/generate-barcode', requireRole('super_admin', 'admin'), async 
     return error(res, 'Server error', 500)
   }
 })
+router.get('/:id/branches', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data: product } = await supabase.from('products').select('id').eq('id', id).single()
+    if (!product) return error(res, 'Product not found', 404)
+
+    const { data, error: dbError } = await supabase
+      .from('branch_products')
+      .select('branch_id, is_active, branches(id, name, address), stock:stock(quantity, low_stock_threshold)')
+      .eq('product_id', id)
+      .eq('is_active', true)
+
+    if (dbError) return error(res, 'Could not fetch branches for this product', 500)
+    return success(res, data, 'Branches fetched')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 
 export default router

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Search, Edit2, Trash2, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { useNavigate } from 'react-router-dom'
 
 const CATEGORIES = ['drug', 'feed', 'accessory']
 const DRUG_TYPES = ['injection', 'powder', 'bolus', 'suspension', 'vaccine', 'syringe']
@@ -19,7 +20,8 @@ function Products() {
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
-
+  const navigate = useNavigate()
+  
   const fetchProducts = async () => {
     setLoading(true)
     try {
@@ -115,7 +117,7 @@ function Products() {
               </thead>
               <tbody>
                 {filtered.map((product) => (
-                  <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
+                  <tr key={product.id} onClick={() => navigate(`/admin/products/${product.id}`)} className="border-b border-gray-50 hover:bg-gray-50 transition cursor-pointer">
                     <td className="px-5 py-3">
                       <p className="font-medium text-gray-800">{product.name}</p>
                       {product.brand && <p className="text-xs text-gray-400">{product.brand}</p>}

@@ -3,6 +3,7 @@ import { Search, Trash2, Plus, Minus, ShoppingCart, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { searchProducts } from '../../services/productService'
 import { createSale, confirmCashPayment, confirmTransferPayment, confirmPOSPayment } from '../../services/salesService'
+import { getBranches } from '../../services/branchService'
 import Receipt from '../../components/pos/Receipt'
 import useAuthStore from '../../store/authStore'
 
@@ -13,13 +14,34 @@ function POS() {
   const [searching, setSearching] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
   const [receipt, setReceipt] = useState(null)
+  const [branches, setBranches] = useState([])
+  const [selectedBranchId, setSelectedBranchId] = useState(null)
   const searchRef = useRef(null)
   const { user } = useAuthStore()
 
+  const isSuperAdmin = user?.role === 'super_admin' || user?.role === 'admin'
+  const activeBranchId = isSuperAdmin ? selectedBranchId : user?.branch_id
+
+  // Auto focus search box on load
   useEffect(() => {
     searchRef.current?.focus()
   }, [])
 
+  // Fetch branches for super admin
+  useEffect(() => {
+    if (isSuperAdmin) {
+      getBranches().then((res) => {
+        if (res.success) {
+          setBranches(res.data)
+          if (res.data.length > 0) {
+            setSelectedBranchId(res.data[0].id)
+          }
+        }
+      })
+    }
+  }, [])
+
+  // Search products as user types
   useEffect(() => {
     const timeout = setTimeout(async () => {
       if (query.length < 2) {
@@ -72,6 +94,27 @@ function POS() {
 
         {/* Search Box */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+
+          {/* Branch Selector — only for super admin */}
+          {isSuperAdmin && branches.length > 0 && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Selling From Branch
+              </label>
+              <select
+                value={selectedBranchId || ''}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 transition"
+              >
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name} {branch.is_main ? '(Main)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <label className="block text-sm font-medium text-gray-600 mb-2">
             Search Product or Scan Barcode
           </label>
@@ -215,6 +258,10 @@ function POS() {
                 toast.error('Add items to cart first')
                 return
               }
+              if (!activeBranchId) {
+                toast.error('Please select a branch first')
+                return
+              }
               setShowPayment(true)
             }}
             className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition"
@@ -238,7 +285,7 @@ function POS() {
         <PaymentModal
           cartItems={cartItems}
           total={total}
-          branchId={user?.branch_id}
+          branchId={activeBranchId}
           cashierId={user?.id}
           onClose={() => setShowPayment(false)}
           onSuccess={(sale) => {
@@ -280,7 +327,6 @@ function PaymentModal({ cartItems, total, branchId, cashierId, onClose, onSucces
     setProcessing(true)
 
     try {
-      // Step 1 — Create sale
       const salePayload = {
         branch_id: branchId,
         cashier_id: cashierId,
@@ -301,8 +347,6 @@ function PaymentModal({ cartItems, total, branchId, cashierId, onClose, onSucces
       }
 
       const saleId = saleRes.data.id
-
-      // Step 2 — Confirm payment
       let paymentRes
 
       if (method === 'Cash') {

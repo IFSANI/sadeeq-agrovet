@@ -6,7 +6,7 @@ export const createSale = async (saleData) => {
 }
 
 export const confirmCashPayment = async (saleId, amount) => {
-  const response = await api.post('/api/payments/cash', { sale_id: saleId, amount })
+  const response = await api.post('/api/payments/cash', { sale_id: saleId, amount_paid: amount })
   return response.data
 }
 
