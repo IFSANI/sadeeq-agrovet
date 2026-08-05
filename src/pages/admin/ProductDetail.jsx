@@ -14,45 +14,22 @@ function ProductDetail() {
   const [showAssignModal, setShowAssignModal] = useState(false)
 
   const fetchData = async () => {
-    setLoading(true)
-    try {
-      const [productRes, branchRes] = await Promise.all([
-        api.get(`/api/products/${id}`),
-        api.get('/api/branches'),
-      ])
-      if (productRes.data.success) setProduct(productRes.data.data)
-
-      const branches = branchRes.data.success ? branchRes.data.data : []
-      setAllBranches(branches)
-
-      // Workaround — get stock per branch for this product
-      const stockPromises = branches.map((branch) =>
-        api.get(`/api/stock/branch/${branch.id}`)
-          .then((res) => {
-            if (res.data.success) {
-              const stockItem = res.data.data.find((s) => s.product_id === id)
-              if (stockItem) {
-                return {
-                  branch_id: branch.id,
-                  branch: branch,
-                  stock: stockItem,
-                }
-              }
-            }
-            return null
-          })
-          .catch(() => null)
-      )
-
-      const stockResults = await Promise.all(stockPromises)
-      setBranchProducts(stockResults.filter(Boolean))
-
-    } catch {
-      toast.error('Failed to load product details')
-    } finally {
-      setLoading(false)
-    }
+  setLoading(true)
+  try {
+    const [productRes, branchRes, branchProductRes] = await Promise.all([
+      api.get(`/api/products/${id}`),
+      api.get('/api/branches'),
+      api.get(`/api/products/${id}/branches`),
+    ])
+    if (productRes.data.success) setProduct(productRes.data.data)
+    if (branchRes.data.success) setAllBranches(branchRes.data.data)
+    if (branchProductRes.data.success) setBranchProducts(branchProductRes.data.data)
+  } catch {
+    toast.error('Failed to load product details')
+  } finally {
+    setLoading(false)
   }
+}
 
   useEffect(() => { fetchData() }, [id])
 
@@ -85,6 +62,7 @@ function ProductDetail() {
     )
   }
 
+  
   const assignedBranchIds = branchProducts.map((bp) => bp.branch_id)
   const unassignedBranches = allBranches.filter((b) => !assignedBranchIds.includes(b.id))
 
@@ -179,36 +157,45 @@ function ProductDetail() {
           </div>
         ) : (
           <div className="divide-y divide-gray-50">
-            {branchProducts.map((bp) => (
-              <div key={bp.branch_id} className="flex items-center justify-between px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-gray-50 rounded-xl flex items-center justify-center">
-                    <GitBranch size={16} className="text-gray-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-800">{bp.branch?.name}</p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {bp.stock?.quantity <= bp.stock?.low_stock_threshold ? (
-                        <span className="flex items-center gap-1 text-xs text-red-500">
-                          <AlertTriangle size={10} />
-                          Low stock — {bp.stock?.quantity || 0} {product.unit_of_measurement} left
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          {bp.stock?.quantity || 0} {product.unit_of_measurement} in stock
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleRemoveFromBranch(bp.branch_id)}
-                  className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
+            {branchProducts.map((bp) => {
+  const quantity = bp.stock?.quantity ?? 0
+  const threshold = bp.stock?.low_stock_threshold ?? 0
+  const isLow = quantity <= threshold
+  const notStocked = bp.stock === null
+
+  return (
+    <div key={bp.branch_id} className="flex items-center justify-between px-5 py-4">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 bg-gray-50 rounded-xl flex items-center justify-center">
+          <GitBranch size={16} className="text-gray-400" />
+        </div>
+        <div>
+          <p className="font-medium text-gray-800">{bp.branches?.name}</p>
+          <div className="flex items-center gap-1 mt-0.5">
+            {notStocked ? (
+              <span className="text-xs text-gray-400">Not stocked yet</span>
+            ) : isLow ? (
+              <span className="flex items-center gap-1 text-xs text-red-500">
+                <AlertTriangle size={10} />
+                Low stock — {quantity} {product.unit_of_measurement} left
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400">
+                {quantity} {product.unit_of_measurement} in stock
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={() => handleRemoveFromBranch(bp.branch_id)}
+        className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  )
+})}
           </div>
         )}
       </div>

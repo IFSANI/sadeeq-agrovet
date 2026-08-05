@@ -86,7 +86,7 @@ router.delete('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
 router.post('/:id/products', requireRole('super_admin', 'admin'), async (req, res) => {
   try {
     const branch_id = req.params.id
-    const { product_id } = req.body
+    const { product_id, initial_stock, low_stock_threshold } = req.body
     if (!product_id) return error(res, 'product_id is required')
 
     const { data: branch } = await supabase.from('branches').select('id').eq('id', branch_id).single()
@@ -96,12 +96,25 @@ router.post('/:id/products', requireRole('super_admin', 'admin'), async (req, re
     if (!product) return error(res, 'Product not found', 404)
 
     const { data, error: dbError } = await supabase
-      .from('branch_products').upsert({ branch_id, product_id, is_active: true }, { onConflict: 'branch_id,product_id' }).select().single()
+      .from('branch_products')
+      .upsert({ branch_id, product_id, is_active: true }, { onConflict: 'branch_id,product_id' })
+      .select()
+      .single()
 
     if (dbError) return error(res, 'Could not link product to branch', 500)
 
-    await supabase.from('stock').upsert({ branch_id, product_id, quantity: 0 }, { onConflict: 'branch_id,product_id', ignoreDuplicates: true })
-    return success(res, data, 'Product added to branch')
+    const { data: stock } = await supabase
+      .from('stock')
+      .upsert({
+        branch_id,
+        product_id,
+        quantity: initial_stock !== undefined ? initial_stock : 0,
+        low_stock_threshold: low_stock_threshold !== undefined ? low_stock_threshold : 5
+      }, { onConflict: 'branch_id,product_id' })
+      .select()
+      .single()
+
+    return success(res, { ...data, stock }, 'Product added to branch')
   } catch (err) {
     return error(res, 'Server error', 500)
   }
