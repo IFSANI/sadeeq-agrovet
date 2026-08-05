@@ -21,11 +21,32 @@ function ProductDetail() {
         api.get('/api/branches'),
       ])
       if (productRes.data.success) setProduct(productRes.data.data)
-      if (branchRes.data.success) setAllBranches(branchRes.data.data)
 
-      // Get branches this product is assigned to
-      const branchProductRes = await api.get(`/api/products/${id}/branches`)
-      if (branchProductRes.data.success) setBranchProducts(branchProductRes.data.data)
+      const branches = branchRes.data.success ? branchRes.data.data : []
+      setAllBranches(branches)
+
+      // Workaround — get stock per branch for this product
+      const stockPromises = branches.map((branch) =>
+        api.get(`/api/stock/branch/${branch.id}`)
+          .then((res) => {
+            if (res.data.success) {
+              const stockItem = res.data.data.find((s) => s.product_id === id)
+              if (stockItem) {
+                return {
+                  branch_id: branch.id,
+                  branch: branch,
+                  stock: stockItem,
+                }
+              }
+            }
+            return null
+          })
+          .catch(() => null)
+      )
+
+      const stockResults = await Promise.all(stockPromises)
+      setBranchProducts(stockResults.filter(Boolean))
+
     } catch {
       toast.error('Failed to load product details')
     } finally {

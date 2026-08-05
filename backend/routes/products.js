@@ -69,14 +69,29 @@ router.get('/barcode/:barcode', async (req, res) => {
 
 router.get('/branch/:branchId', async (req, res) => {
   try {
-    const { data, error: dbError } = await supabase
+    const { branchId } = req.params
+
+    const { data: branchProducts, error: dbError } = await supabase
       .from('branch_products')
-      .select('product_id, is_active, products(*), stock:stock(quantity, low_stock_threshold)')
-      .eq('branch_id', req.params.branchId)
+      .select('product_id, is_active, products(*)')
+      .eq('branch_id', branchId)
       .eq('is_active', true)
 
     if (dbError) return error(res, 'Could not fetch branch products', 500)
-    return success(res, data, 'Branch products fetched')
+
+    const productIds = branchProducts.map(bp => bp.product_id)
+    const { data: stockRows } = await supabase
+      .from('stock')
+      .select('product_id, quantity, low_stock_threshold')
+      .eq('branch_id', branchId)
+      .in('product_id', productIds)
+
+    const merged = branchProducts.map(bp => ({
+      ...bp,
+      stock: (stockRows || []).find(s => s.product_id === bp.product_id) || null
+    }))
+
+    return success(res, merged, 'Branch products fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
   }
@@ -163,14 +178,27 @@ router.get('/:id/branches', async (req, res) => {
     const { data: product } = await supabase.from('products').select('id').eq('id', id).single()
     if (!product) return error(res, 'Product not found', 404)
 
-    const { data, error: dbError } = await supabase
+    const { data: branchProducts, error: dbError } = await supabase
       .from('branch_products')
-      .select('branch_id, is_active, branches(id, name, address), stock:stock(quantity, low_stock_threshold)')
+      .select('branch_id, is_active, branches(id, name, address)')
       .eq('product_id', id)
       .eq('is_active', true)
 
     if (dbError) return error(res, 'Could not fetch branches for this product', 500)
-    return success(res, data, 'Branches fetched')
+
+    const branchIds = branchProducts.map(bp => bp.branch_id)
+    const { data: stockRows } = await supabase
+      .from('stock')
+      .select('branch_id, quantity, low_stock_threshold')
+      .eq('product_id', id)
+      .in('branch_id', branchIds)
+
+    const merged = branchProducts.map(bp => ({
+      ...bp,
+      stock: (stockRows || []).find(s => s.branch_id === bp.branch_id) || null
+    }))
+
+    return success(res, merged, 'Branches fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
   }
