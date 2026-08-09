@@ -304,7 +304,8 @@ function AssignBranchModal({ productId, branches, onClose, onSaved }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
+            <label cla
+            ssName="block text-sm font-medium text-gray-600 mb-1">
               Low Stock Alert Threshold
             </label>
             <input

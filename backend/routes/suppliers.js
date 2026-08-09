@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from '../lib/middleware.js'
 
 const router = express.Router()
 router.use(requireAuth)
+router.use(requireRole('super_admin', 'admin', 'cashier'))
 
 router.get('/', async (req, res) => {
   try {

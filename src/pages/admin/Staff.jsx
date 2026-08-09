@@ -242,7 +242,7 @@ function StaffModal({ member, branches, onClose, onSaved }) {
               name="name"
               value={form.name}
               onChange={handleChange}
-              placeholder="e.g. Musa Abdullahi"
+              placeholder="e.g. Aliyu Hassan"
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
             />
           </div>
@@ -256,7 +256,8 @@ function StaffModal({ member, branches, onClose, onSaved }) {
               type="email"
               value={form.email}
               onChange={handleChange}
-              placeholder="e.g. musa@sadeeqagrovet.com"
+              placeholder="e.g. youremail@sadeeqagrovet.com"
+              autoComplete="off"
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
             />
           </div>
@@ -319,6 +320,7 @@ function StaffModal({ member, branches, onClose, onSaved }) {
               value={form.password}
               onChange={handleChange}
               placeholder="Enter password"
+              autoComplete="new-password"
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
             />
           </div>

@@ -138,7 +138,8 @@ router.get('/schedules/:id/availability', requireAuth, async (req, res) => {
   }
 })
 
-router.get('/bookings', requireAuth, async (req, res) => {
+router.get('/bookings', requireAuth, requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
+
   try {
     const { status, customer } = req.query
     let query = supabase
@@ -250,6 +251,7 @@ router.get('/bookings/code/:bookingCode', requireAuth, async (req, res) => {
       .eq('booking_code', req.params.bookingCode).single()
 
     if (dbError || !data) return error(res, 'Booking not found', 404)
+
     return success(res, data, 'Booking fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
@@ -281,6 +283,9 @@ router.get('/bookings/:id/receipt', requireAuth, async (req, res) => {
       .eq('id', req.params.id).single()
 
     if (dbError || !data) return error(res, 'Booking not found', 404)
+      if (req.user.role === 'customer' && data.customer_id !== req.user.id) {
+      return error(res, 'Unauthorized', 403)
+    }
     return success(res, data, 'Receipt fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
@@ -295,6 +300,9 @@ router.get('/bookings/:id', requireAuth, async (req, res) => {
       .eq('id', req.params.id).single()
 
     if (dbError || !data) return error(res, 'Booking not found', 404)
+      if (req.user.role === 'customer' && data.customer_id !== req.user.id) {
+      return error(res, 'Unauthorized', 403)
+    }
     return success(res, data, 'Booking fetched')
   } catch (err) {
     return error(res, 'Server error', 500)

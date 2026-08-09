@@ -17,7 +17,7 @@ function POS() {
   const [branches, setBranches] = useState([])
   const [selectedBranchId, setSelectedBranchId] = useState(null)
   const searchRef = useRef(null)
-  const { user } = useAuthStore()
+  const { user, defaultBranchId } = useAuthStore()
 
   const isSuperAdmin = user?.role === 'super_admin' || user?.role === 'admin'
   const activeBranchId = isSuperAdmin ? selectedBranchId : user?.branch_id
@@ -28,18 +28,21 @@ function POS() {
   }, [])
 
   // Fetch branches for super admin
-  useEffect(() => {
-    if (isSuperAdmin) {
-      getBranches().then((res) => {
-        if (res.success) {
-          setBranches(res.data)
-          if (res.data.length > 0) {
-            setSelectedBranchId(res.data[0].id)
-          }
+ useEffect(() => {
+  if (isSuperAdmin) {
+    getBranches().then((res) => {
+      if (res.success) {
+        setBranches(res.data)
+        // Use default branch if set, otherwise first branch
+        if (defaultBranchId) {
+          setSelectedBranchId(defaultBranchId)
+        } else if (res.data.length > 0) {
+          setSelectedBranchId(res.data[0].id)
         }
-      })
-    }
-  }, [])
+      }
+    })
+  }
+}, [])
 
   // Search products as user types
   useEffect(() => {
@@ -97,23 +100,28 @@ function POS() {
 
           {/* Branch Selector — only for super admin */}
           {isSuperAdmin && branches.length > 0 && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-600 mb-1">
-                Selling From Branch
-              </label>
-              <select
-                value={selectedBranchId || ''}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 transition"
-              >
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name} {branch.is_main ? '(Main)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+  <div className="mb-4">
+    <label className="block text-sm font-medium text-gray-600 mb-1">
+      Selling From Branch
+    </label>
+    <select
+      value={selectedBranchId || ''}
+      onChange={(e) => setSelectedBranchId(e.target.value)}
+      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 transition"
+    >
+      {branches.map((branch) => (
+        <option key={branch.id} value={branch.id}>
+          {branch.name}
+          {branch.is_main ? ' (Main)' : ''}
+          {branch.id === defaultBranchId ? ' ★ Default' : ''}
+        </option>
+      ))}
+    </select>
+    <p className="text-xs text-gray-400 mt-1">
+      Change your default branch from the Branches screen
+    </p>
+  </div>
+)}
 
           <label className="block text-sm font-medium text-gray-600 mb-2">
             Search Product or Scan Barcode

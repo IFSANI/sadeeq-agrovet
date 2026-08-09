@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react'
 import { Plus, Edit2, Trash2, GitBranch, MapPin, Phone, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import useAuthStore from '../../store/authStore'
 
 function Branches() {
   const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
+  const { user, defaultBranchId, setDefaultBranch } = useAuthStore()
+  const isSuperAdmin = user?.role === 'super_admin'
 
   const fetchBranches = async () => {
     setLoading(true)
@@ -124,17 +127,32 @@ function Branches() {
                 )}
               </div>
 
-              {/* Status */}
-              <div className="mt-3 pt-3 border-t border-gray-50">
-                <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
-                  branch.is_active
-                    ? 'bg-green-50 text-green-600'
-                    : 'bg-red-50 text-red-500'
-                }`}>
-                  {branch.is_active ? 'Active' : 'Inactive'}
-                </span>
-              </div>
+              {/* Status + Default */}
+<div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between">
+  <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
+    branch.is_active
+      ? 'bg-green-50 text-green-600'
+      : 'bg-red-50 text-red-500'
+  }`}>
+    {branch.is_active ? 'Active' : 'Inactive'}
+  </span>
 
+  {isSuperAdmin && (
+    <button
+      onClick={() => {
+        setDefaultBranch(branch.id)
+        toast.success(`${branch.name} set as default branch`)
+      }}
+      className={`text-xs font-medium px-3 py-1.5 rounded-lg transition ${
+        defaultBranchId === branch.id
+          ? 'bg-green-600 text-white'
+          : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+      }`}
+    >
+      {defaultBranchId === branch.id ? '✓ Default' : 'Set Default'}
+    </button>
+  )}
+</div>
             </div>
           ))}
         </div>

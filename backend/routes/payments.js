@@ -8,6 +8,9 @@ router.use(requireAuth)
 
 async function confirmPayment(req, res, expectedMethod) {
   try {
+    if (!['super_admin', 'admin', 'cashier'].includes(req.user.role)) {
+      return error(res, 'Unauthorized', 403)
+    }
     const { sale_id, reference, amount_paid } = req.body
     if (!sale_id) return error(res, 'sale_id is required')
 
