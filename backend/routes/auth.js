@@ -75,7 +75,7 @@ router.post('/customer/login', async (req, res) => {
       customer: { id: customer.id, name: customer.name, phone: customer.phone, email: customer.email }
     }, 'Login successful')
   } catch (err) {
-    return error(res, 'Server error', 500)
+    return error(res, err.message, 500)
   }
 })
 
