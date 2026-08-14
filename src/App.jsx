@@ -12,6 +12,7 @@ import Staff from './pages/admin/Staff'
 import useAuthStore from './store/authStore'
 import Stock from './pages/admin/Stock'
 import SalesHistory from './pages/admin/SalesHistory'
+import Customers from './pages/admin/Customers'
 
 function ComingSoon({ title }) {
   return (
@@ -60,13 +61,15 @@ function App() {
         <Route path="/admin/chicks/varieties" element={<AdminPage title="Chick Varieties" />} />
         <Route path="/admin/chicks/schedules" element={<AdminPage title="Delivery Schedules" />} />
         <Route path="/admin/chicks/bookings" element={<AdminPage title="Chick Bookings" />} />
-        <Route path="/admin/customers" element={<AdminPage title="Customers" />} />
+        
         <Route path="/admin/credit" element={<AdminPage title="Credit & Debt" />} />
         <Route path="/admin/expenses" element={<AdminPage title="Expenses" />} />
         <Route path="/admin/reports" element={<AdminPage title="Reports" />} />
         <Route path="/admin/settings" element={<AdminPage title="Settings" />} />
         <Route path="/admin/stock" element={<AdminPage><Stock /></AdminPage>} />
         <Route path="/admin/sales" element={<AdminPage><SalesHistory /></AdminPage>} />
+        <Route path="/admin/customers" element={<AdminPage><Customers /></AdminPage>} />
+
       </Routes>
     </BrowserRouter>
   )
