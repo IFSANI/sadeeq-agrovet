@@ -13,6 +13,7 @@ import useAuthStore from './store/authStore'
 import Stock from './pages/admin/Stock'
 import SalesHistory from './pages/admin/SalesHistory'
 import Customers from './pages/admin/Customers'
+import LooseCart from './pages/cashier/LooseCart'
 
 function ComingSoon({ title }) {
   return (
@@ -54,10 +55,7 @@ function App() {
         <Route path="/admin/products/:id" element={<AdminPage><ProductDetail /></AdminPage>} />
         <Route path="/admin/branches" element={<AdminPage><Branches /></AdminPage>} />
         <Route path="/admin/suppliers" element={<AdminPage><Suppliers /></AdminPage>} />
-        <Route path="/admin/staff" element={<AdminPage><Staff /></AdminPage>} />
-        
-        <Route path="/admin/cart" element={<AdminPage title="Loose Cart" />} />
-        
+        <Route path="/admin/staff" element={<AdminPage><Staff /></AdminPage>} />        
         <Route path="/admin/chicks/varieties" element={<AdminPage title="Chick Varieties" />} />
         <Route path="/admin/chicks/schedules" element={<AdminPage title="Delivery Schedules" />} />
         <Route path="/admin/chicks/bookings" element={<AdminPage title="Chick Bookings" />} />
@@ -69,7 +67,8 @@ function App() {
         <Route path="/admin/stock" element={<AdminPage><Stock /></AdminPage>} />
         <Route path="/admin/sales" element={<AdminPage><SalesHistory /></AdminPage>} />
         <Route path="/admin/customers" element={<AdminPage><Customers /></AdminPage>} />
-
+        <Route path="/admin/cart" element={<AdminPage><LooseCart /></AdminPage>} />
+        
       </Routes>
     </BrowserRouter>
   )

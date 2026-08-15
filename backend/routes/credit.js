@@ -1,0 +1,125 @@
+import express from 'express'
+import supabase from '../lib/supabase.js'
+import { success, error } from '../lib/helpers.js'
+import { requireAuth, requireRole } from '../lib/middleware.js'
+
+const router = express.Router()
+router.use(requireAuth)
+
+router.get('/:id/credit', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
+  try {
+    const { data, error: dbError } = await supabase.from('credit_accounts').select('*').eq('customer_id', req.params.id).maybeSingle()
+    if (dbError) return error(res, 'Could not fetch credit account', 500)
+    return success(res, data, data ? 'Credit account fetched' : 'No credit account exists yet')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
+router.put('/:id/credit/limit', requireRole('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { id: customer_id } = req.params
+    const { credit_limit } = req.body
+    if (credit_limit === undefined || credit_limit < 0) return error(res, 'A valid credit_limit is required')
+
+    const { data: customer } = await supabase.from('customers').select('id').eq('id', customer_id).single()
+    if (!customer) return error(res, 'Customer not found', 404)
+
+    const { data: account, error: dbError } = await supabase
+      .from('credit_accounts')
+      .upsert({ customer_id, credit_limit }, { onConflict: 'customer_id' })
+      .select().single()
+
+    if (dbError) return error(res, 'Could not set credit limit', 500)
+
+    await supabase.from('customers').update({ credit_limit, credit_status: account.status }).eq('id', customer_id)
+    await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'update_credit_limit', entity_type: 'credit_account', entity_id: account.id, new_value: account })
+
+    return success(res, account, 'Credit limit set')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
+router.put('/:id/credit/activate', requireRole('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { id: customer_id } = req.params
+    const { data: account } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
+    if (!account) return error(res, 'This customer has no credit account yet — set a credit limit first')
+
+    const { data: updated, error: dbError } = await supabase.from('credit_accounts').update({ status: 'active' }).eq('id', account.id).select().single()
+    if (dbError) return error(res, 'Could not activate credit account', 500)
+
+    await supabase.from('customers').update({ credit_status: 'active' }).eq('id', customer_id)
+    return success(res, updated, 'Credit account activated')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
+router.put('/:id/credit/suspend', requireRole('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { id: customer_id } = req.params
+    const { data: account } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
+    if (!account) return error(res, 'This customer has no credit account')
+
+    const { data: updated, error: dbError } = await supabase.from('credit_accounts').update({ status: 'suspended' }).eq('id', account.id).select().single()
+    if (dbError) return error(res, 'Could not suspend credit account', 500)
+
+    await supabase.from('customers').update({ credit_status: 'suspended' }).eq('id', customer_id)
+    return success(res, updated, 'Credit account suspended')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
+router.get('/:id/credit/transactions', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
+  try {
+    const { id: customer_id } = req.params
+    const { data: account } = await supabase.from('credit_accounts').select('id').eq('customer_id', customer_id).maybeSingle()
+    if (!account) return success(res, [], 'No credit account exists yet')
+
+    const { data, error: dbError } = await supabase
+      .from('credit_transactions').select('*').eq('credit_account_id', account.id).order('created_at', { ascending: false })
+
+    if (dbError) return error(res, 'Could not fetch credit transactions', 500)
+    return success(res, data, 'Credit transactions fetched')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
+router.post('/:id/credit/repay', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
+  try {
+    const { id: customer_id } = req.params
+    const { amount, payment_method, reference } = req.body
+    if (!amount || amount <= 0) return error(res, 'A valid amount is required')
+    if (!payment_method) return error(res, 'payment_method is required')
+
+    const { data: account } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
+    if (!account) return error(res, 'This customer has no credit account')
+    if (Number(amount) > Number(account.current_balance)) return error(res, 'Amount exceeds the outstanding balance')
+
+    const newBalance = Number(account.current_balance) - Number(amount)
+
+    const { data: payment, error: payErr } = await supabase
+      .from('payments')
+      .insert({ credit_account_id: account.id, amount, payment_method, reference: reference || null, confirmed_by: req.user.id })
+      .select().single()
+
+    if (payErr) return error(res, 'Could not record payment', 500)
+
+    await supabase.from('credit_accounts').update({ current_balance: newBalance }).eq('id', account.id)
+    await supabase.from('credit_transactions').insert({
+      credit_account_id: account.id, type: 'credit', amount, payment_id: payment.id, balance_after: newBalance
+    })
+
+    await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'repay', entity_type: 'credit_account', entity_id: account.id, new_value: { amount, newBalance } })
+
+    return success(res, { payment, new_balance: newBalance }, 'Repayment recorded')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
+export default router
