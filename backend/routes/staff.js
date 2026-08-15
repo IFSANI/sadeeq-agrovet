@@ -35,7 +35,7 @@ router.post('/', async (req, res) => {
     let finalBranchId = branch_id
 
     if (req.user.role === 'admin') {
-      if (role === 'super_admin') return error(res, 'Admins cannot create super_admin accounts', 403)
+      if (role !== 'cashier') return error(res, 'Admins can only create cashier accounts', 403)
       finalBranchId = req.user.branch_id
     }
 

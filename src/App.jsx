@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import Login from './pages/auth/Login'
 import AdminLayout from './components/common/AdminLayout'
+import CashierLayout from './components/common/CashierLayout'
 import Dashboard from './pages/admin/Dashboard'
 import POS from './pages/admin/POS'
 import Products from './pages/admin/Products'
@@ -14,6 +15,7 @@ import Stock from './pages/admin/Stock'
 import SalesHistory from './pages/admin/SalesHistory'
 import Customers from './pages/admin/Customers'
 import LooseCart from './pages/cashier/LooseCart'
+import CashierDashboard from './pages/cashier/CashierDashboard'
 
 function ComingSoon({ title }) {
   return (
@@ -34,6 +36,31 @@ function AdminPage({ children, title }) {
   )
 }
 
+function CashierPage({ children, title }) {
+  return (
+    <CashierLayout>
+      {children || <ComingSoon title={title} />}
+    </CashierLayout>
+  )
+}
+
+// Guards a route by role. `allowed` is an array of roles permitted here.
+// Not logged in -> /login. Logged in but wrong role -> their own dashboard.
+function ProtectedRoute({ allowed, children }) {
+  const { user, isAuthenticated } = useAuthStore()
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (!allowed.includes(user?.role)) {
+    const fallback = user?.role === 'cashier' ? '/cashier/dashboard' : '/admin/dashboard'
+    return <Navigate to={fallback} replace />
+  }
+
+  return children
+}
+
 function App() {
   const loadFromStorage = useAuthStore((state) => state.loadFromStorage)
 
@@ -48,27 +75,79 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/customer/login" element={<ComingSoon title="Customer Login" />} />
 
-        {/* Admin Routes */}
-        <Route path="/admin/dashboard" element={<AdminPage><Dashboard /></AdminPage>} />
-        <Route path="/admin/pos" element={<AdminPage><POS /></AdminPage>} />
-        <Route path="/admin/products" element={<AdminPage><Products /></AdminPage>} />
-        <Route path="/admin/products/:id" element={<AdminPage><ProductDetail /></AdminPage>} />
-        <Route path="/admin/branches" element={<AdminPage><Branches /></AdminPage>} />
-        <Route path="/admin/suppliers" element={<AdminPage><Suppliers /></AdminPage>} />
-        <Route path="/admin/staff" element={<AdminPage><Staff /></AdminPage>} />        
-        <Route path="/admin/chicks/varieties" element={<AdminPage title="Chick Varieties" />} />
-        <Route path="/admin/chicks/schedules" element={<AdminPage title="Delivery Schedules" />} />
-        <Route path="/admin/chicks/bookings" element={<AdminPage title="Chick Bookings" />} />
-        
-        <Route path="/admin/credit" element={<AdminPage title="Credit & Debt" />} />
-        <Route path="/admin/expenses" element={<AdminPage title="Expenses" />} />
-        <Route path="/admin/reports" element={<AdminPage title="Reports" />} />
-        <Route path="/admin/settings" element={<AdminPage title="Settings" />} />
-        <Route path="/admin/stock" element={<AdminPage><Stock /></AdminPage>} />
-        <Route path="/admin/sales" element={<AdminPage><SalesHistory /></AdminPage>} />
-        <Route path="/admin/customers" element={<AdminPage><Customers /></AdminPage>} />
-        <Route path="/admin/cart" element={<AdminPage><LooseCart /></AdminPage>} />
-        
+        {/* Admin + Super Admin Routes */}
+        <Route path="/admin/dashboard" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Dashboard /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/pos" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><POS /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/products" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Products /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/products/:id" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><ProductDetail /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/branches" element={
+          <ProtectedRoute allowed={['super_admin']}><AdminPage><Branches /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/suppliers" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Suppliers /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/staff" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Staff /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/chicks/varieties" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Chick Varieties" /></ProtectedRoute>
+        } />
+        <Route path="/admin/chicks/schedules" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Delivery Schedules" /></ProtectedRoute>
+        } />
+        <Route path="/admin/chicks/bookings" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Chick Bookings" /></ProtectedRoute>
+        } />
+        <Route path="/admin/credit" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Credit & Debt" /></ProtectedRoute>
+        } />
+        <Route path="/admin/expenses" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Expenses" /></ProtectedRoute>
+        } />
+        <Route path="/admin/reports" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Reports" /></ProtectedRoute>
+        } />
+        <Route path="/admin/settings" element={
+          <ProtectedRoute allowed={['super_admin']}><AdminPage title="Settings" /></ProtectedRoute>
+        } />
+        <Route path="/admin/stock" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Stock /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/sales" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><SalesHistory /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/customers" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Customers /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/cart" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><LooseCart /></AdminPage></ProtectedRoute>
+        } />
+
+        {/* Cashier Routes */}
+        <Route path="/cashier/dashboard" element={
+          <ProtectedRoute allowed={['cashier']}><CashierPage><CashierDashboard /></CashierPage></ProtectedRoute>
+        } />
+        <Route path="/cashier/pos" element={
+          <ProtectedRoute allowed={['cashier']}><CashierPage><POS /></CashierPage></ProtectedRoute>
+        } />
+        <Route path="/cashier/cart" element={
+          <ProtectedRoute allowed={['cashier']}><CashierPage><LooseCart /></CashierPage></ProtectedRoute>
+        } />
+        <Route path="/cashier/sales" element={
+          <ProtectedRoute allowed={['cashier']}><CashierPage><SalesHistory /></CashierPage></ProtectedRoute>
+        } />
+        <Route path="/cashier/customers" element={
+          <ProtectedRoute allowed={['cashier']}><CashierPage><Customers /></CashierPage></ProtectedRoute>
+        } />
+
       </Routes>
     </BrowserRouter>
   )

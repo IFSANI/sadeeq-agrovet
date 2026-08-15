@@ -13,48 +13,48 @@ const navItems = [
   {
     section: 'Main',
     items: [
-      { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard', roles: ['super_admin', 'admin'] },
     ]
   },
   {
     section: 'Sales',
     items: [
-      { label: 'POS / New Sale', icon: ShoppingCart, path: '/admin/pos' },
-      { label: 'Sales History', icon: Receipt, path: '/admin/sales' },
-      { label: 'Loose Cart', icon: ShoppingCart, path: '/admin/cart' },
+      { label: 'POS / New Sale', icon: ShoppingCart, path: '/admin/pos', roles: ['super_admin', 'admin'] },
+      { label: 'Sales History', icon: Receipt, path: '/admin/sales', roles: ['super_admin', 'admin'] },
+      { label: 'Loose Cart', icon: ShoppingCart, path: '/admin/cart', roles: ['super_admin', 'admin'] },
     ]
   },
   {
     section: 'Inventory',
     items: [
-      { label: 'Products', icon: Package, path: '/admin/products' },
-      { label: 'Stock', icon: ArrowLeftRight, path: '/admin/stock' },
-      { label: 'Suppliers', icon: Truck, path: '/admin/suppliers' },
+      { label: 'Products', icon: Package, path: '/admin/products', roles: ['super_admin', 'admin'] },
+      { label: 'Stock', icon: ArrowLeftRight, path: '/admin/stock', roles: ['super_admin', 'admin'] },
+      { label: 'Suppliers', icon: Truck, path: '/admin/suppliers', roles: ['super_admin', 'admin'] },
     ]
   },
   {
     section: 'Chicks',
     items: [
-      { label: 'Varieties', icon: Bird, path: '/admin/chicks/varieties' },
-      { label: 'Schedules', icon: Bird, path: '/admin/chicks/schedules' },
-      { label: 'Bookings', icon: Bird, path: '/admin/chicks/bookings' },
+      { label: 'Varieties', icon: Bird, path: '/admin/chicks/varieties', roles: ['super_admin', 'admin'] },
+      { label: 'Schedules', icon: Bird, path: '/admin/chicks/schedules', roles: ['super_admin', 'admin'] },
+      { label: 'Bookings', icon: Bird, path: '/admin/chicks/bookings', roles: ['super_admin', 'admin'] },
     ]
   },
   {
     section: 'People',
     items: [
-      { label: 'Customers', icon: Users, path: '/admin/customers' },
-      { label: 'Staff', icon: Users, path: '/admin/staff' },
-      { label: 'Credit & Debt', icon: Wallet, path: '/admin/credit' },
+      { label: 'Customers', icon: Users, path: '/admin/customers', roles: ['super_admin', 'admin'] },
+      { label: 'Staff', icon: Users, path: '/admin/staff', roles: ['super_admin', 'admin'] },
+      { label: 'Credit & Debt', icon: Wallet, path: '/admin/credit', roles: ['super_admin', 'admin'] },
     ]
   },
   {
     section: 'Business',
     items: [
-      { label: 'Branches', icon: GitBranch, path: '/admin/branches' },
-      { label: 'Expenses', icon: Wallet, path: '/admin/expenses' },
-      { label: 'Reports', icon: BarChart2, path: '/admin/reports' },
-      { label: 'Settings', icon: Settings, path: '/admin/settings' },
+      { label: 'Branches', icon: GitBranch, path: '/admin/branches', roles: ['super_admin'] },
+      { label: 'Expenses', icon: Wallet, path: '/admin/expenses', roles: ['super_admin', 'admin'] },
+      { label: 'Reports', icon: BarChart2, path: '/admin/reports', roles: ['super_admin', 'admin'] },
+      { label: 'Settings', icon: Settings, path: '/admin/settings', roles: ['super_admin'] },
     ]
   },
 ]
@@ -63,6 +63,13 @@ function AdminLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
+
+  const visibleNavItems = navItems
+  .map((group) => ({
+    ...group,
+    items: group.items.filter((item) => item.roles.includes(user?.role)),
+  }))
+  .filter((group) => group.items.length > 0)
 
   const handleLogout = () => {
     logout()
@@ -110,7 +117,7 @@ function AdminLayout({ children }) {
 
         {/* Nav Items */}
         <nav className="flex-1 overflow-y-auto py-4 px-3">
-          {navItems.map((group) => (
+          {visibleNavItems.map((group) => (
             <div key={group.section} className="mb-4">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-1">
                 {group.section}
