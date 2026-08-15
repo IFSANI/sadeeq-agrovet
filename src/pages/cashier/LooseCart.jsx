@@ -27,16 +27,18 @@ function LooseCart() {
   useEffect(() => { fetchOpenCart() }, [])
 
   const openNewCart = async () => {
-    try {
-      const res = await api.post('/api/carts', { branch_id: branchId })
-      if (res.data.success) {
-        setCart(res.data.data)
-        toast.success('Cart opened!')
-      }
-    } catch {
-      toast.error('Failed to open cart')
+  try {
+    const res = await api.post('/api/carts', { branch_id: branchId })
+    if (res.data.success) {
+      setCart(res.data.data)
+      toast.success('Cart opened!')
     }
+  } catch (err) {
+    const message = err.response?.data?.message || 'Failed to open cart'
+    toast.error(message)
+    fetchOpenCart() // refresh in case a cart already exists
   }
+}
 
   return (
     <div className="space-y-4">

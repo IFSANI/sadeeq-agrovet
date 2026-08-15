@@ -12,6 +12,11 @@ router.post('/', async (req, res) => {
     const { branch_id } = req.body
     if (!branch_id) return error(res, 'branch_id is required')
 
+    const { data: existingOpen } = await supabase
+      .from('loose_sale_carts').select('id').eq('branch_id', branch_id).eq('status', 'open').maybeSingle()
+
+    if (existingOpen) return error(res, 'This branch already has an open cart — close it before opening a new one')
+
     const { data: cart, error: dbError } = await supabase
       .from('loose_sale_carts')
       .insert({ cashier_id: req.user.id, branch_id, status: 'open' })
@@ -42,7 +47,24 @@ router.get('/active', async (req, res) => {
     return error(res, 'Server error', 500)
   }
 })
+router.get('/open', async (req, res) => {
+  try {
+    const { branch_id } = req.query
+    if (!branch_id) return error(res, 'branch_id is required')
 
+    const { data, error: dbError } = await supabase
+      .from('loose_sale_carts')
+      .select('*, cart_items(*, products(name, unit_of_measurement)), users:cashier_id(name)')
+      .eq('branch_id', branch_id)
+      .eq('status', 'open')
+      .maybeSingle()
+
+    if (dbError) return error(res, 'Could not check for open cart', 500)
+    return success(res, data, data ? 'Open cart found' : 'No open cart for this branch')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 router.get('/:id', async (req, res) => {
   try {
     const { data: cart, error: dbError } = await supabase
