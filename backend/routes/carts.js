@@ -9,8 +9,9 @@ router.use(requireRole('super_admin', 'admin', 'cashier'))
 
 router.post('/', async (req, res) => {
   try {
-    const { branch_id } = req.body
+    let { branch_id } = req.body
     if (!branch_id) return error(res, 'branch_id is required')
+    if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
 
     const { data: existingOpen } = await supabase
       .from('loose_sale_carts').select('id').eq('branch_id', branch_id).eq('status', 'open').maybeSingle()

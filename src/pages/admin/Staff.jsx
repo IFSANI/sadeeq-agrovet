@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Edit2, Users, Phone, Mail, GitBranch } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
-
-const ROLES = ['admin', 'cashier']
+import useAuthStore from '../../store/authStore'
 
 const roleColors = {
   super_admin: 'bg-purple-100 text-purple-700',
@@ -17,6 +16,8 @@ function Staff() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
+  const { user } = useAuthStore()
+  const isSuperAdmin = user?.role === 'super_admin'
 
   const fetchData = async () => {
     setLoading(true)
@@ -164,6 +165,8 @@ function Staff() {
         <StaffModal
           member={editing}
           branches={branches}
+          isSuperAdmin={isSuperAdmin}
+          currentUserBranchId={user?.branch_id}
           onClose={() => setShowModal(false)}
           onSaved={() => {
             setShowModal(false)
@@ -176,13 +179,15 @@ function Staff() {
   )
 }
 
-function StaffModal({ member, branches, onClose, onSaved }) {
+function StaffModal({ member, branches, isSuperAdmin, currentUserBranchId, onClose, onSaved }) {
+  const availableRoles = isSuperAdmin ? ['super_admin', 'admin', 'cashier'] : ['cashier']
+
   const [form, setForm] = useState({
     name: member?.name || '',
     email: member?.email || '',
     phone: member?.phone || '',
-    role: member?.role || 'cashier',
-    branch_id: member?.branch_id || '',
+    role: member?.role || (isSuperAdmin ? 'cashier' : 'cashier'),
+    branch_id: member?.branch_id || (isSuperAdmin ? '' : currentUserBranchId || ''),
     password: '',
   })
   const [saving, setSaving] = useState(false)
@@ -205,6 +210,9 @@ function StaffModal({ member, branches, onClose, onSaved }) {
     try {
       const payload = { ...form }
       if (!payload.password) delete payload.password
+      // Admin can't change branch anyway (backend forces it), but strip it
+      // client-side too so the intent is clear.
+      if (!isSuperAdmin) delete payload.branch_id
 
       const res = member
         ? await api.put(`/api/staff/${member.id}`, payload)
@@ -214,8 +222,8 @@ function StaffModal({ member, branches, onClose, onSaved }) {
         toast.success(member ? 'Staff updated!' : 'Staff added!')
         onSaved()
       }
-    } catch {
-      toast.error('Failed to save staff')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save staff')
     } finally {
       setSaving(false)
     }
@@ -279,36 +287,49 @@ function StaffModal({ member, branches, onClose, onSaved }) {
             <label className="block text-sm font-medium text-gray-600 mb-1">
               Role *
             </label>
-            <select
-              name="role"
-              value={form.role}
-              onChange={handleChange}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r} className="capitalize">{r}</option>
-              ))}
-            </select>
+            {isSuperAdmin ? (
+              <select
+                name="role"
+                value={form.role}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              >
+                {availableRoles.map((r) => (
+                  <option key={r} value={r} className="capitalize">{r.replace('_', ' ')}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value="Cashier"
+                disabled
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500"
+              />
+            )}
+            {!isSuperAdmin && (
+              <p className="text-xs text-gray-400 mt-1">Admins can only create cashier accounts.</p>
+            )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Assign to Branch
-            </label>
-            <select
-              name="branch_id"
-              value={form.branch_id}
-              onChange={handleChange}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-            >
-              <option value="">Select branch</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} {b.is_main ? '(Main)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Assign to Branch
+              </label>
+              <select
+                name="branch_id"
+                value={form.branch_id}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              >
+                <option value="">Select branch</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} {b.is_main ? '(Main)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">

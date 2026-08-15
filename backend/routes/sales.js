@@ -57,9 +57,10 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { branch_id, customer_id, payment_method, items, offline_id } = req.body
+    let { branch_id, customer_id, payment_method, items, offline_id } = req.body
 
     if (!branch_id) return error(res, 'branch_id is required')
+    if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
     if (!payment_method) return error(res, 'payment_method is required')
     if (!Array.isArray(items) || items.length === 0) return error(res, 'items array is required')
     for (const item of items) {

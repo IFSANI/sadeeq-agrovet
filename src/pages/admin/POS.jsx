@@ -19,7 +19,7 @@ function POS() {
   const searchRef = useRef(null)
   const { user, defaultBranchId } = useAuthStore()
 
-  const isSuperAdmin = user?.role === 'super_admin' || user?.role === 'admin'
+  const isSuperAdmin = user?.role === 'super_admin'
   const activeBranchId = isSuperAdmin ? selectedBranchId : user?.branch_id
 
   // Auto focus search box on load
