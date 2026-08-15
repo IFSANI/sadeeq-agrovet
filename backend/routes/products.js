@@ -18,14 +18,14 @@ router.get('/', async (req, res) => {
 
 router.post('/', requireRole('super_admin', 'admin'), async (req, res) => {
   try {
-    const { name, category, drug_type, unit_of_measurement, weight, brand, barcode, price } = req.body
+    const { name, category, drug_type, unit_of_measurement, weight, brand, barcode, price, wholesale_price } = req.body
     if (!name || !category || !unit_of_measurement || price === undefined) {
       return error(res, 'name, category, unit_of_measurement and price are required')
     }
 
     const { data: product, error: dbError } = await supabase
       .from('products')
-      .insert({ name, category, drug_type: drug_type || null, unit_of_measurement, weight: weight || null, brand: brand || null, barcode: barcode || null, price })
+      .insert({ name, category, drug_type: drug_type || null, unit_of_measurement, weight: weight || null, brand: brand || null, barcode: barcode || null, price, wholesale_price: wholesale_price ?? null })
       .select().single()
 
     if (dbError) {
@@ -113,7 +113,7 @@ router.put('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
     const { data: existing } = await supabase.from('products').select('*').eq('id', id).single()
     if (!existing) return error(res, 'Product not found', 404)
 
-    const allowed = ['name', 'category', 'drug_type', 'unit_of_measurement', 'weight', 'brand', 'barcode', 'price', 'is_active']
+    const allowed = ['name', 'category', 'drug_type', 'unit_of_measurement', 'weight', 'brand', 'barcode', 'price', 'wholesale_price', 'is_active']
     const updates = {}
     for (const key of allowed) if (req.body[key] !== undefined) updates[key] = req.body[key]
     updates.updated_at = new Date()
