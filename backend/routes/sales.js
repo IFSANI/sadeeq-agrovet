@@ -9,7 +9,9 @@ router.use(requireRole('super_admin', 'admin', 'cashier'))
 
 router.get('/today', async (req, res) => {
   try {
-    const { branch } = req.query
+    let { branch } = req.query
+    if (req.user.role !== 'super_admin') branch = req.user.branch_id
+
     const startOfDay = new Date()
     startOfDay.setHours(0, 0, 0, 0)
 
@@ -31,7 +33,9 @@ router.get('/today', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const { branch, status, from, to, customer } = req.query
+    let { branch, status, from, to, customer } = req.query
+    if (req.user.role !== 'super_admin') branch = req.user.branch_id
+
     let query = supabase
       .from('sales')
       .select('*, customers(name, phone), branches(name)')

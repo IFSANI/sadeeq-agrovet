@@ -9,6 +9,10 @@ router.use(requireRole('super_admin', 'admin', 'cashier'))
 
 router.get('/branch/:branchId', async (req, res) => {
   try {
+    if (req.user.role !== 'super_admin' && req.params.branchId !== req.user.branch_id) {
+      return error(res, 'Unauthorized', 403)
+    }
+
     const { data, error: dbError } = await supabase
       .from('stock')
       .select('*, products(id, name, category, unit_of_measurement, price)')
@@ -51,7 +55,9 @@ router.put('/branch/:branchId/product/:productId', requireRole('super_admin', 'a
 
 router.get('/low-stock', async (req, res) => {
   try {
-    const { branch } = req.query
+    let { branch } = req.query
+    if (req.user.role !== 'super_admin') branch = req.user.branch_id
+
     let query = supabase.from('stock').select('*, products(id, name, category, unit_of_measurement), branches(id, name)')
     if (branch) query = query.eq('branch_id', branch)
 
@@ -67,7 +73,8 @@ router.get('/low-stock', async (req, res) => {
 
 router.get('/restock', async (req, res) => {
   try {
-    const { branch, from, to } = req.query
+    let { branch, from, to } = req.query
+      if (req.user.role !== 'super_admin') branch = req.user.branch_id
     let query = supabase
       .from('stock_receipts')
       .select('*, branches(name), suppliers(name), users:received_by(name), stock_receipt_items(*, products(name))')
@@ -131,14 +138,17 @@ router.post('/restock', requireRole('super_admin', 'admin'), async (req, res) =>
 
 router.get('/transfer', async (req, res) => {
   try {
-    const { status, branch } = req.query
+    const { status } = req.query
     let query = supabase
       .from('stock_transfers')
-      .select('*, from:from_branch_id(name), to:to_branch_id(name), stock_transfer_items(*, products(name))')
+      .select('*, from:from_branch_id(name), to:to_branch_id(name), stock_transfer_items(*, products(name)))')
       .order('created_at', { ascending: false })
 
     if (status) query = query.eq('status', status)
-    if (branch) query = query.or(`from_branch_id.eq.${branch},to_branch_id.eq.${branch}`)
+
+    if (req.user.role !== 'super_admin') {
+      query = query.or(`from_branch_id.eq.${req.user.branch_id},to_branch_id.eq.${req.user.branch_id}`)
+    }
 
     const { data, error: dbError } = await query
     if (dbError) return error(res, 'Could not fetch transfers', 500)

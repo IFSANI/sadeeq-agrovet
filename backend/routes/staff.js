@@ -10,9 +10,13 @@ router.use(requireRole('super_admin', 'admin'))
 
 router.get('/', async (req, res) => {
   try {
-    const { data, error: dbError } = await supabase
+    let query = supabase
       .from('users').select('id, name, email, phone, role, branch_id, is_active, created_at, branches(name)')
       .order('name', { ascending: true })
+
+    if (req.user.role !== 'super_admin') query = query.eq('branch_id', req.user.branch_id)
+
+    const { data, error: dbError } = await query
 
     if (dbError) return error(res, 'Could not fetch staff', 500)
     return success(res, data, 'Staff fetched')
