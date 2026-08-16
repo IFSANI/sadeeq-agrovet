@@ -50,10 +50,16 @@ function POS() {
         setSearchResults([])
         return
       }
+      if (!activeBranchId) {
+        setSearchResults([])
+        return
+      }
       setSearching(true)
       try {
-        const res = await searchProducts(query)
-        if (res.success) setSearchResults(res.data)
+        const res = await searchProducts(query, activeBranchId)
+        if (res.success) {
+          setSearchResults(res.data)
+        }
       } catch {
         toast.error('Search failed')
       } finally {
@@ -61,7 +67,7 @@ function POS() {
       }
     }, 300)
     return () => clearTimeout(timeout)
-  }, [query])
+  }, [query, activeBranchId])
 
   const getItemPrice = (product) => {
     if (isWholesale && product.wholesale_price) {
@@ -164,28 +170,43 @@ function POS() {
 
           {searchResults.length > 0 && (
             <div className="mt-2 border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-              {searchResults.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-green-50 transition border-b border-gray-50 last:border-0 text-left"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{product.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {product.category} • {product.unit_of_measurement}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-green-600">
-                      ₦{getItemPrice(product).toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {isWholesale && product.wholesale_price ? 'wholesale' : 'retail'} • per {product.unit_of_measurement}
-                    </p>
-                  </div>
-                </button>
-              ))}
+              {searchResults.map((product) => {
+                const isLow = product.stock?.quantity != null && product.stock.quantity <= product.stock.low_stock_threshold
+                const outOfStock = product.stock?.quantity === 0
+                return (
+                  <button
+                    key={product.id}
+                    onClick={() => !outOfStock && addToCart(product)}
+                    disabled={outOfStock}
+                    className={`w-full flex items-center justify-between px-4 py-3 transition border-b border-gray-50 last:border-0 text-left ${
+                      outOfStock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-50'
+                    }`}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{product.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {product.category} • {product.unit_of_measurement}
+                      </p>
+                      {product.stock?.quantity != null && (
+                        <p className={`text-xs font-medium mt-0.5 ${
+                          outOfStock ? 'text-red-500' : isLow ? 'text-orange-500' : 'text-gray-400'
+                        }`}>
+                          {outOfStock ? 'Out of stock' : `${product.stock.quantity} ${product.unit_of_measurement} in stock`}
+                          {isLow && !outOfStock && ' • Low'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-3">
+                      <p className="text-sm font-bold text-green-600">
+                        ₦{getItemPrice(product).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {isWholesale && product.wholesale_price ? 'wholesale' : 'retail'} • per {product.unit_of_measurement}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>

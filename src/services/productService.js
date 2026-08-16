@@ -4,9 +4,10 @@ export const getProducts = async (branchId) => {
   const response = await api.get(`/api/products/branch/${branchId}`)
   return response.data
 }
-
-export const searchProducts = async (query) => {
-  const response = await api.get(`/api/products/search?q=${query}`)
+export const searchProducts = async (query, branchId) => {
+  const response = await api.get('/api/products/search', {
+    params: { q: query, branch_id: branchId },
+  })
   return response.data
 }
 

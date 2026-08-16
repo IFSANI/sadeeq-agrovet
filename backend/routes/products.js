@@ -147,6 +147,7 @@ router.put('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
     const allowed = ['name', 'category', 'drug_type', 'unit_of_measurement', 'weight', 'brand', 'barcode', 'price', 'wholesale_price', 'is_active']
     const updates = {}
     for (const key of allowed) if (req.body[key] !== undefined) updates[key] = req.body[key]
+    if (updates.drug_type === '') updates.drug_type = null
     updates.updated_at = new Date()
 
     const { data: updated, error: dbError } = await supabase.from('products').update(updates).eq('id', id).select().single()

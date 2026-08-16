@@ -141,13 +141,13 @@ function Products() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleEdit(product)}
+                          onClick={(e) => { e.stopPropagation(); handleEdit(product) }}
                           className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
                         >
                           <Edit2 size={14} />
                         </button>
                         <button
-                          onClick={() => handleDelete(product.id)}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(product.id) }}
                           className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
                         >
                           <Trash2 size={14} />
@@ -203,16 +203,24 @@ function ProductModal({ product, onClose, onSaved }) {
     }
     setSaving(true)
     try {
+      const payload = {
+        ...form,
+        price: Number(form.price),
+        wholesale_price: form.wholesale_price ? Number(form.wholesale_price) : null,
+      }
+
       const res = product
-        ? await api.put(`/api/products/${product.id}`, form)
-        : await api.post('/api/products', form)
+        ? await api.put(`/api/products/${product.id}`, payload)
+        : await api.post('/api/products', payload)
 
       if (res.data.success) {
         toast.success(product ? 'Product updated!' : 'Product added!')
         onSaved()
       }
-    } catch {
-      toast.error('Failed to save product')
+    } catch (err) {
+      const message = err.response?.data?.message || 'Failed to save product'
+      toast.error(message)
+      console.error('Product save error:', err.response?.data)
     } finally {
       setSaving(false)
     }
