@@ -207,6 +207,10 @@ function ProductModal({ product, onClose, onSaved }) {
         ...form,
         price: Number(form.price),
         wholesale_price: form.wholesale_price ? Number(form.wholesale_price) : null,
+        drug_type: form.drug_type || null,
+        brand: form.brand || null,
+        weight: form.weight || null,
+        barcode: form.barcode || null,
       }
 
       const res = product

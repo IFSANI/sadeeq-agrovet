@@ -86,7 +86,7 @@ router.delete('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
 router.post('/:id/products', requireRole('super_admin', 'admin'), async (req, res) => {
   try {
     const branch_id = req.params.id
-    const { product_id, initial_stock, low_stock_threshold } = req.body
+    const { product_id, initial_stock, low_stock_threshold, cost_price, supplier_id } = req.body
     if (!product_id) return error(res, 'product_id is required')
 
     const { data: branch } = await supabase.from('branches').select('id').eq('id', branch_id).single()
@@ -103,18 +103,41 @@ router.post('/:id/products', requireRole('super_admin', 'admin'), async (req, re
 
     if (dbError) return error(res, 'Could not link product to branch', 500)
 
+    const quantity = initial_stock !== undefined ? initial_stock : 0
+
     const { data: stock } = await supabase
       .from('stock')
       .upsert({
         branch_id,
         product_id,
-        quantity: initial_stock !== undefined ? initial_stock : 0,
+        quantity,
         low_stock_threshold: low_stock_threshold !== undefined ? low_stock_threshold : 5
       }, { onConflict: 'branch_id,product_id' })
       .select()
       .single()
 
-    return success(res, { ...data, stock }, 'Product added to branch')
+    let receipt = null
+    if (cost_price !== undefined && quantity > 0) {
+      const { data: receiptRow, error: receiptErr } = await supabase
+        .from('stock_receipts')
+        .insert({
+          branch_id,
+          supplier_id: supplier_id || null,
+          received_by: req.user.id,
+          total_cost: quantity * cost_price,
+          notes: 'Initial stock on branch assignment'
+        })
+        .select().single()
+
+      if (!receiptErr) {
+        await supabase.from('stock_receipt_items').insert({
+          stock_receipt_id: receiptRow.id, product_id, quantity, cost_price
+        })
+        receipt = receiptRow
+      }
+    }
+
+    return success(res, { ...data, stock, receipt }, 'Product added to branch')
   } catch (err) {
     return error(res, 'Server error', 500)
   }

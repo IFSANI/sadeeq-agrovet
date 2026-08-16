@@ -10,26 +10,29 @@ function ProductDetail() {
   const [product, setProduct] = useState(null)
   const [branchProducts, setBranchProducts] = useState([])
   const [allBranches, setAllBranches] = useState([])
+  const [suppliers, setSuppliers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAssignModal, setShowAssignModal] = useState(false)
 
   const fetchData = async () => {
-  setLoading(true)
-  try {
-    const [productRes, branchRes, branchProductRes] = await Promise.all([
-      api.get(`/api/products/${id}`),
-      api.get('/api/branches'),
-      api.get(`/api/products/${id}/branches`),
-    ])
-    if (productRes.data.success) setProduct(productRes.data.data)
-    if (branchRes.data.success) setAllBranches(branchRes.data.data)
-    if (branchProductRes.data.success) setBranchProducts(branchProductRes.data.data)
-  } catch {
-    toast.error('Failed to load product details')
-  } finally {
-    setLoading(false)
+    setLoading(true)
+    try {
+      const [productRes, branchRes, branchProductRes, supplierRes] = await Promise.all([
+        api.get(`/api/products/${id}`),
+        api.get('/api/branches'),
+        api.get(`/api/products/${id}/branches`),
+        api.get('/api/suppliers'),
+      ])
+      if (productRes.data.success) setProduct(productRes.data.data)
+      if (branchRes.data.success) setAllBranches(branchRes.data.data)
+      if (branchProductRes.data.success) setBranchProducts(branchProductRes.data.data)
+      if (supplierRes.data.success) setSuppliers(supplierRes.data.data)
+    } catch {
+      toast.error('Failed to load product details')
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   useEffect(() => { fetchData() }, [id])
 
@@ -62,7 +65,7 @@ function ProductDetail() {
     )
   }
 
-  
+
   const assignedBranchIds = branchProducts.map((bp) => bp.branch_id)
   const unassignedBranches = allBranches.filter((b) => !assignedBranchIds.includes(b.id))
 
@@ -99,9 +102,16 @@ function ProductDetail() {
               </div>
             </div>
           </div>
-          <p className="text-2xl font-bold text-green-600">
-            ₦{Number(product.price).toLocaleString()}
-          </p>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-green-600">
+              ₦{Number(product.price).toLocaleString()}
+            </p>
+            {product.wholesale_price && (
+              <p className="text-xs text-orange-500 font-medium mt-0.5">
+                Wholesale: ₦{Number(product.wholesale_price).toLocaleString()}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Product Details Grid */}
@@ -158,44 +168,44 @@ function ProductDetail() {
         ) : (
           <div className="divide-y divide-gray-50">
             {branchProducts.map((bp) => {
-  const quantity = bp.stock?.quantity ?? 0
-  const threshold = bp.stock?.low_stock_threshold ?? 0
-  const isLow = quantity <= threshold
-  const notStocked = bp.stock === null
+              const quantity = bp.stock?.quantity ?? 0
+              const threshold = bp.stock?.low_stock_threshold ?? 0
+              const isLow = quantity <= threshold
+              const notStocked = bp.stock === null
 
-  return (
-    <div key={bp.branch_id} className="flex items-center justify-between px-5 py-4">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 bg-gray-50 rounded-xl flex items-center justify-center">
-          <GitBranch size={16} className="text-gray-400" />
-        </div>
-        <div>
-          <p className="font-medium text-gray-800">{bp.branches?.name}</p>
-          <div className="flex items-center gap-1 mt-0.5">
-            {notStocked ? (
-              <span className="text-xs text-gray-400">Not stocked yet</span>
-            ) : isLow ? (
-              <span className="flex items-center gap-1 text-xs text-red-500">
-                <AlertTriangle size={10} />
-                Low stock — {quantity} {product.unit_of_measurement} left
-              </span>
-            ) : (
-              <span className="text-xs text-gray-400">
-                {quantity} {product.unit_of_measurement} in stock
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      <button
-        onClick={() => handleRemoveFromBranch(bp.branch_id)}
-        className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
-      >
-        <Trash2 size={14} />
-      </button>
-    </div>
-  )
-})}
+              return (
+                <div key={bp.branch_id} className="flex items-center justify-between px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-gray-50 rounded-xl flex items-center justify-center">
+                      <GitBranch size={16} className="text-gray-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-800">{bp.branches?.name}</p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {notStocked ? (
+                          <span className="text-xs text-gray-400">Not stocked yet</span>
+                        ) : isLow ? (
+                          <span className="flex items-center gap-1 text-xs text-red-500">
+                            <AlertTriangle size={10} />
+                            Low stock — {quantity} {product.unit_of_measurement} left
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            {quantity} {product.unit_of_measurement} in stock
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveFromBranch(bp.branch_id)}
+                    className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -204,7 +214,9 @@ function ProductDetail() {
       {showAssignModal && (
         <AssignBranchModal
           productId={id}
+          product={product}
           branches={unassignedBranches}
+          suppliers={suppliers}
           onClose={() => setShowAssignModal(false)}
           onSaved={() => {
             setShowAssignModal(false)
@@ -217,11 +229,13 @@ function ProductDetail() {
   )
 }
 
-function AssignBranchModal({ productId, branches, onClose, onSaved }) {
+function AssignBranchModal({ productId, product, branches, suppliers, onClose, onSaved }) {
   const [form, setForm] = useState({
     branch_id: branches[0]?.id || '',
     initial_stock: '',
     low_stock_threshold: '10',
+    cost_price: '',
+    supplier_id: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -241,17 +255,25 @@ function AssignBranchModal({ productId, branches, onClose, onSaved }) {
     }
     setSaving(true)
     try {
-      const res = await api.post(`/api/branches/${form.branch_id}/products`, {
+      const payload = {
         product_id: productId,
         initial_stock: Number(form.initial_stock),
         low_stock_threshold: Number(form.low_stock_threshold),
-      })
+      }
+      if (form.cost_price) {
+        payload.cost_price = Number(form.cost_price)
+      }
+      if (form.supplier_id) {
+        payload.supplier_id = form.supplier_id
+      }
+
+      const res = await api.post(`/api/branches/${form.branch_id}/products`, payload)
       if (res.data.success) {
         toast.success('Product assigned to branch!')
         onSaved()
       }
-    } catch {
-      toast.error('Failed to assign product to branch')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to assign product to branch')
     } finally {
       setSaving(false)
     }
@@ -259,12 +281,29 @@ function AssignBranchModal({ productId, branches, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
 
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-800">Assign to Branch</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
+
+        {/* Current pricing — read only reference */}
+        <div className="bg-gray-50 rounded-xl p-3 mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-400">Retail Price</p>
+            <p className="text-sm font-semibold text-gray-800">₦{Number(product.price).toLocaleString()}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-400">Wholesale Price</p>
+            <p className="text-sm font-semibold text-gray-800">
+              {product.wholesale_price ? `₦${Number(product.wholesale_price).toLocaleString()}` : '—'}
+            </p>
+          </div>
+        </div>
+        <p className="text-xs text-gray-400 -mt-3 mb-4">
+          Pricing is set on the product itself and applies to every branch. Edit it from the Products screen.
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
@@ -304,8 +343,7 @@ function AssignBranchModal({ productId, branches, onClose, onSaved }) {
           </div>
 
           <div>
-            <label cla
-            ssName="block text-sm font-medium text-gray-600 mb-1">
+            <label className="block text-sm font-medium text-gray-600 mb-1">
               Low Stock Alert Threshold
             </label>
             <input
@@ -320,6 +358,42 @@ function AssignBranchModal({ productId, branches, onClose, onSaved }) {
               Alert when stock falls below this number
             </p>
           </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Cost Price (₦ per unit)
+            </label>
+            <input
+              name="cost_price"
+              type="number"
+              value={form.cost_price}
+              onChange={handleChange}
+              placeholder="What you paid per unit (optional)"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Leave blank if unknown. Needed later for profit reports — recommended to fill in if you have it.
+            </p>
+          </div>
+
+          {form.cost_price && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Supplier
+              </label>
+              <select
+                name="supplier_id"
+                value={form.supplier_id}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              >
+                <option value="">Select supplier (optional)</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button
