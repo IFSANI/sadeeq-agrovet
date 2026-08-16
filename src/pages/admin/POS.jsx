@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Search, Trash2, Plus, Minus, ShoppingCart, X } from 'lucide-react'
+import { Search, Trash2, Plus, Minus, ShoppingCart, X, User, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { searchProducts } from '../../services/productService'
 import { createSale, confirmCashPayment, confirmTransferPayment, confirmPOSPayment } from '../../services/salesService'
 import { getBranches } from '../../services/branchService'
 import Receipt from '../../components/pos/Receipt'
 import useAuthStore from '../../store/authStore'
+import api from '../../services/api'
 
 function POS() {
   const [query, setQuery] = useState('')
@@ -16,35 +17,33 @@ function POS() {
   const [receipt, setReceipt] = useState(null)
   const [branches, setBranches] = useState([])
   const [selectedBranchId, setSelectedBranchId] = useState(null)
+  const [isWholesale, setIsWholesale] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
   const searchRef = useRef(null)
   const { user, defaultBranchId } = useAuthStore()
 
   const isSuperAdmin = user?.role === 'super_admin'
   const activeBranchId = isSuperAdmin ? selectedBranchId : user?.branch_id
 
-  // Auto focus search box on load
   useEffect(() => {
     searchRef.current?.focus()
   }, [])
 
-  // Fetch branches for super admin
- useEffect(() => {
-  if (isSuperAdmin) {
-    getBranches().then((res) => {
-      if (res.success) {
-        setBranches(res.data)
-        // Use default branch if set, otherwise first branch
-        if (defaultBranchId) {
-          setSelectedBranchId(defaultBranchId)
-        } else if (res.data.length > 0) {
-          setSelectedBranchId(res.data[0].id)
+  useEffect(() => {
+    if (isSuperAdmin) {
+      getBranches().then((res) => {
+        if (res.success) {
+          setBranches(res.data)
+          if (defaultBranchId) {
+            setSelectedBranchId(defaultBranchId)
+          } else if (res.data.length > 0) {
+            setSelectedBranchId(res.data[0].id)
+          }
         }
-      }
-    })
-  }
-}, [])
+      })
+    }
+  }, [])
 
-  // Search products as user types
   useEffect(() => {
     const timeout = setTimeout(async () => {
       if (query.length < 2) {
@@ -63,6 +62,13 @@ function POS() {
     }, 300)
     return () => clearTimeout(timeout)
   }, [query])
+
+  const getItemPrice = (product) => {
+    if (isWholesale && product.wholesale_price) {
+      return Number(product.wholesale_price)
+    }
+    return Number(product.price)
+  }
 
   const addToCart = (product) => {
     setQuery('')
@@ -87,7 +93,7 @@ function POS() {
     setCartItems(cartItems.filter((i) => i.id !== id))
   }
 
-  const total = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const total = cartItems.reduce((sum, i) => sum + getItemPrice(i) * i.quantity, 0)
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full">
@@ -100,28 +106,43 @@ function POS() {
 
           {/* Branch Selector — only for super admin */}
           {isSuperAdmin && branches.length > 0 && (
-  <div className="mb-4">
-    <label className="block text-sm font-medium text-gray-600 mb-1">
-      Selling From Branch
-    </label>
-    <select
-      value={selectedBranchId || ''}
-      onChange={(e) => setSelectedBranchId(e.target.value)}
-      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 transition"
-    >
-      {branches.map((branch) => (
-        <option key={branch.id} value={branch.id}>
-          {branch.name}
-          {branch.is_main ? ' (Main)' : ''}
-          {branch.id === defaultBranchId ? ' ★ Default' : ''}
-        </option>
-      ))}
-    </select>
-    <p className="text-xs text-gray-400 mt-1">
-      Change your default branch from the Branches screen
-    </p>
-  </div>
-)}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Selling From Branch
+              </label>
+              <select
+                value={selectedBranchId || ''}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 transition"
+              >
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                    {branch.is_main ? ' (Main)' : ''}
+                    {branch.id === defaultBranchId ? ' ★ Default' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                Change your default branch from the Branches screen
+              </p>
+            </div>
+          )}
+
+          {/* Wholesale Toggle */}
+          <div className="flex items-center justify-between mb-4 bg-gray-50 rounded-xl px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Wholesale Pricing</p>
+              <p className="text-xs text-gray-400">Applies to entire sale</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsWholesale(!isWholesale)}
+              className={`relative w-12 h-6 rounded-full transition ${isWholesale ? 'bg-orange-500' : 'bg-gray-300'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${isWholesale ? 'translate-x-6' : ''}`} />
+            </button>
+          </div>
 
           <label className="block text-sm font-medium text-gray-600 mb-2">
             Search Product or Scan Barcode
@@ -157,9 +178,11 @@ function POS() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-green-600">
-                      ₦{Number(product.price).toLocaleString()}
+                      ₦{getItemPrice(product).toLocaleString()}
                     </p>
-                    <p className="text-xs text-gray-400">per {product.unit_of_measurement}</p>
+                    <p className="text-xs text-gray-400">
+                      {isWholesale && product.wholesale_price ? 'wholesale' : 'retail'} • per {product.unit_of_measurement}
+                    </p>
                   </div>
                 </button>
               ))}
@@ -190,7 +213,10 @@ function POS() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
                     <p className="text-xs text-gray-400">
-                      ₦{Number(item.price).toLocaleString()} per {item.unit_of_measurement}
+                      ₦{getItemPrice(item).toLocaleString()} per {item.unit_of_measurement}
+                      {isWholesale && item.wholesale_price && (
+                        <span className="text-orange-500 ml-1">(wholesale)</span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -214,7 +240,7 @@ function POS() {
                     </button>
                   </div>
                   <p className="text-sm font-bold text-gray-800 w-24 text-right">
-                    ₦{(item.price * item.quantity).toLocaleString()}
+                    ₦{(getItemPrice(item) * item.quantity).toLocaleString()}
                   </p>
                   <button
                     onClick={() => removeFromCart(item.id)}
@@ -234,7 +260,13 @@ function POS() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sticky top-20">
           <h2 className="font-semibold text-gray-700 mb-4">Order Summary</h2>
 
-          <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+          {/* Customer Attach */}
+          <CustomerPicker
+            selectedCustomer={selectedCustomer}
+            onSelect={setSelectedCustomer}
+          />
+
+          <div className="space-y-2 mb-4 max-h-48 overflow-y-auto mt-4">
             {cartItems.length === 0 ? (
               <p className="text-gray-300 text-sm text-center py-4">No items yet</p>
             ) : (
@@ -244,7 +276,7 @@ function POS() {
                     {item.name} x{item.quantity}
                   </span>
                   <span className="font-medium text-gray-800 flex-shrink-0">
-                    ₦{(item.price * item.quantity).toLocaleString()}
+                    ₦{(getItemPrice(item) * item.quantity).toLocaleString()}
                   </span>
                 </div>
               ))
@@ -258,6 +290,9 @@ function POS() {
                 ₦{total.toLocaleString()}
               </span>
             </div>
+            {isWholesale && (
+              <p className="text-xs text-orange-500 mt-1 text-right">Wholesale pricing applied</p>
+            )}
           </div>
 
           <button
@@ -295,10 +330,15 @@ function POS() {
           total={total}
           branchId={activeBranchId}
           cashierId={user?.id}
+          customerId={selectedCustomer?.id}
+          isWholesale={isWholesale}
+          getItemPrice={getItemPrice}
           onClose={() => setShowPayment(false)}
           onSuccess={(sale) => {
             setCartItems([])
             setShowPayment(false)
+            setSelectedCustomer(null)
+            setIsWholesale(false)
             setReceipt(sale)
           }}
         />
@@ -316,8 +356,163 @@ function POS() {
   )
 }
 
+// Customer search / quick-add
+function CustomerPicker({ selectedCustomer, onSelect }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (query.length < 2) { setResults([]); return }
+    const timer = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await api.get('/api/customers/search', { params: { q: query } })
+        if (res.data.success) setResults(res.data.data)
+      } catch {
+        // silent — search just won't show results
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const pickCustomer = (customer) => {
+    onSelect(customer)
+    setQuery('')
+    setResults([])
+  }
+
+  const clearCustomer = () => {
+    onSelect(null)
+    setQuery('')
+  }
+
+  const handleQuickAdd = async (e) => {
+    e.preventDefault()
+    if (!newName || !newPhone) {
+      toast.error('Name and phone are required')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await api.post('/api/customers', { name: newName, phone: newPhone })
+      if (res.data.success) {
+        toast.success('Customer added!')
+        onSelect(res.data.data)
+        setShowQuickAdd(false)
+        setNewName('')
+        setNewPhone('')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add customer')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (selectedCustomer) {
+    return (
+      <div className="bg-green-50 rounded-xl p-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <User size={16} className="text-green-600 flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-800 truncate">{selectedCustomer.name}</p>
+            <p className="text-xs text-gray-500">{selectedCustomer.phone}</p>
+          </div>
+        </div>
+        <button onClick={clearCustomer} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+          <X size={16} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 mb-1">
+        Customer (optional)
+      </label>
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name or phone"
+          className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+        />
+        {searching && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+        )}
+      </div>
+
+      {results.length > 0 && (
+        <div className="mt-1 border border-gray-100 rounded-lg overflow-hidden shadow-sm">
+          {results.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => pickCustomer(c)}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition border-b border-gray-50 last:border-0"
+            >
+              <p className="font-medium text-gray-800">{c.name}</p>
+              <p className="text-xs text-gray-400">{c.phone}</p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {query.length >= 2 && !searching && results.length === 0 && !showQuickAdd && (
+        <button
+          onClick={() => { setShowQuickAdd(true); setNewPhone(query.match(/^\d+$/) ? query : ''); setNewName(query.match(/^\d+$/) ? '' : query) }}
+          className="mt-1 flex items-center gap-1.5 text-xs text-green-600 hover:text-green-700 font-medium"
+        >
+          <UserPlus size={13} /> No match — quick-add customer
+        </button>
+      )}
+
+      {showQuickAdd && (
+        <form onSubmit={handleQuickAdd} className="mt-2 bg-gray-50 rounded-lg p-3 space-y-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Customer name"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+          />
+          <input
+            value={newPhone}
+            onChange={(e) => setNewPhone(e.target.value)}
+            placeholder="Phone number"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowQuickAdd(false)}
+              className="flex-1 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-500 hover:bg-white transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition disabled:opacity-60"
+            >
+              {saving ? 'Adding...' : 'Add & Attach'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
+
 // Payment Modal
-function PaymentModal({ cartItems, total, branchId, cashierId, onClose, onSuccess }) {
+function PaymentModal({ cartItems, total, branchId, cashierId, customerId, isWholesale, getItemPrice, onClose, onSuccess }) {
   const [method, setMethod] = useState(null)
   const [processing, setProcessing] = useState(false)
 
@@ -338,13 +533,15 @@ function PaymentModal({ cartItems, total, branchId, cashierId, onClose, onSucces
       const salePayload = {
         branch_id: branchId,
         cashier_id: cashierId,
+        customer_id: customerId || null,
         payment_method: method.toLowerCase(),
         total_amount: total,
+        is_wholesale: isWholesale,
         items: cartItems.map((item) => ({
           product_id: item.id,
           quantity: item.quantity,
-          unit_price: item.price,
-          subtotal: item.price * item.quantity,
+          unit_price: getItemPrice(item),
+          subtotal: getItemPrice(item) * item.quantity,
         })),
       }
 

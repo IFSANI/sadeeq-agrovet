@@ -25,8 +25,13 @@ function Stock() {
       ])
       if (branchRes.data.success) {
         setBranches(branchRes.data.data)
-        const firstBranch = defaultBranchId || branchRes.data.data[0]?.id
-        const targetBranch = branchId || firstBranch
+
+        // Super admin: use passed branch, else their saved default, else first branch.
+        // Admin/cashier: always their own assigned branch — never anything else.
+        const targetBranch = isSuperAdmin
+          ? (branchId || defaultBranchId || branchRes.data.data[0]?.id)
+          : user?.branch_id
+
         setSelectedBranch(targetBranch)
         if (targetBranch) {
           const stockRes = await api.get(`/api/stock/branch/${targetBranch}`)
@@ -94,7 +99,7 @@ function Stock() {
         </div>
       </div>
 
-      {/* Branch Selector */}
+      {/* Branch Selector — super_admin only */}
       {isSuperAdmin && branches.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <label className="block text-sm font-medium text-gray-600 mb-1">
@@ -208,6 +213,8 @@ function Stock() {
           branches={branches}
           suppliers={suppliers}
           defaultBranchId={selectedBranch}
+          isSuperAdmin={isSuperAdmin}
+          userBranchId={user?.branch_id}
           onClose={() => setShowRestockModal(false)}
           onSaved={() => {
             setShowRestockModal(false)
@@ -222,6 +229,8 @@ function Stock() {
         <TransferModal
           branches={branches}
           defaultFromBranchId={selectedBranch}
+          isSuperAdmin={isSuperAdmin}
+          userBranchId={user?.branch_id}
           onClose={() => setShowTransferModal(false)}
           onSaved={() => {
             setShowTransferModal(false)
@@ -235,9 +244,9 @@ function Stock() {
   )
 }
 
-function RestockModal({ branches, suppliers, defaultBranchId, onClose, onSaved }) {
+function RestockModal({ branches, suppliers, defaultBranchId, isSuperAdmin, userBranchId, onClose, onSaved }) {
   const [form, setForm] = useState({
-    branch_id: defaultBranchId || '',
+    branch_id: isSuperAdmin ? (defaultBranchId || '') : (userBranchId || ''),
     supplier_id: '',
     notes: '',
   })
@@ -289,8 +298,8 @@ function RestockModal({ branches, suppliers, defaultBranchId, onClose, onSaved }
       })
       if (res.data.success) onSaved()
       else toast.error(res.data.message || 'Failed to restock')
-    } catch {
-      toast.error('Failed to restock')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to restock')
     } finally {
       setSaving(false)
     }
@@ -307,19 +316,30 @@ function RestockModal({ branches, suppliers, defaultBranchId, onClose, onSaved }
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Branch *</label>
-            <select
-              value={form.branch_id}
-              onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-            >
-              <option value="">Select branch</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Branch *</label>
+              <select
+                value={form.branch_id}
+                onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              >
+                <option value="">Select branch</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Branch</label>
+              <input
+                value={branches.find((b) => b.id === form.branch_id)?.name || 'Your branch'}
+                disabled
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">Supplier</label>
@@ -427,9 +447,9 @@ function RestockModal({ branches, suppliers, defaultBranchId, onClose, onSaved }
   )
 }
 
-function TransferModal({ branches, defaultFromBranchId, onClose, onSaved }) {
+function TransferModal({ branches, defaultFromBranchId, isSuperAdmin, userBranchId, onClose, onSaved }) {
   const [form, setForm] = useState({
-    from_branch_id: defaultFromBranchId || '',
+    from_branch_id: isSuperAdmin ? (defaultFromBranchId || '') : (userBranchId || ''),
     to_branch_id: '',
     notes: '',
   })
@@ -481,8 +501,8 @@ function TransferModal({ branches, defaultFromBranchId, onClose, onSaved }) {
       })
       if (res.data.success) onSaved()
       else toast.error(res.data.message || 'Failed to transfer')
-    } catch {
-      toast.error('Failed to transfer stock')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to transfer stock')
     } finally {
       setSaving(false)
     }
@@ -501,19 +521,30 @@ function TransferModal({ branches, defaultFromBranchId, onClose, onSaved }) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">From Branch *</label>
-            <select
-              value={form.from_branch_id}
-              onChange={(e) => setForm({ ...form, from_branch_id: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-            >
-              <option value="">Select branch</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">From Branch *</label>
+              <select
+                value={form.from_branch_id}
+                onChange={(e) => setForm({ ...form, from_branch_id: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              >
+                <option value="">Select branch</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">From Branch</label>
+              <input
+                value={branches.find((b) => b.id === form.from_branch_id)?.name || 'Your branch'}
+                disabled
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">To Branch *</label>

@@ -110,7 +110,8 @@ function Products() {
                   <th className="text-left px-5 py-3">Product Name</th>
                   <th className="text-left px-5 py-3">Category</th>
                   <th className="text-left px-5 py-3">Unit</th>
-                  <th className="text-left px-5 py-3">Price</th>
+                  <th className="text-left px-5 py-3">Retail Price</th>
+                  <th className="text-left px-5 py-3">Wholesale Price</th>
                   <th className="text-left px-5 py-3">Barcode</th>
                   <th className="text-left px-5 py-3">Actions</th>
                 </tr>
@@ -130,6 +131,9 @@ function Products() {
                     <td className="px-5 py-3 text-gray-600">{product.unit_of_measurement}</td>
                     <td className="px-5 py-3 font-semibold text-gray-800">
                       ₦{Number(product.price).toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3 text-gray-600">
+                      {product.wholesale_price ? `₦${Number(product.wholesale_price).toLocaleString()}` : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-5 py-3 text-gray-400 text-xs">
                       {product.barcode || 'No barcode'}
@@ -175,15 +179,16 @@ function Products() {
 
 function ProductModal({ product, onClose, onSaved }) {
   const [form, setForm] = useState({
-    name: product?.name || '',
-    category: product?.category || 'drug',
-    drug_type: product?.drug_type || '',
-    unit_of_measurement: product?.unit_of_measurement || '',
-    weight: product?.weight || '',
-    brand: product?.brand || '',
-    barcode: product?.barcode || '',
-    price: product?.price || '',
-  })
+  name: product?.name || '',
+  category: product?.category || 'drug',
+  drug_type: product?.drug_type || '',
+  unit_of_measurement: product?.unit_of_measurement || '',
+  weight: product?.weight || '',
+  brand: product?.brand || '',
+  barcode: product?.barcode || '',
+  price: product?.price || '',
+  wholesale_price: product?.wholesale_price || '',
+})
   const [saving, setSaving] = useState(false)
 
   const handleChange = (e) => {
@@ -329,18 +334,33 @@ function ProductModal({ product, onClose, onSaved }) {
           </div>
 
           {/* Price */}
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Price (₦) *
-            </label>
-            <input
-              name="price"
-              type="number"
-              value={form.price}
-              onChange={handleChange}
-              placeholder="e.g. 5000"
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Retail Price (₦) *
+              </label>
+              <input
+                name="price"
+                type="number"
+                value={form.price}
+                onChange={handleChange}
+                placeholder="e.g. 5000"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Wholesale Price (₦)
+              </label>
+              <input
+                name="wholesale_price"
+                type="number"
+                value={form.wholesale_price}
+                onChange={handleChange}
+                placeholder="Optional"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
           </div>
 
           {/* Barcode */}

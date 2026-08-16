@@ -42,8 +42,39 @@ router.post('/', requireRole('super_admin', 'admin'), async (req, res) => {
 
 router.get('/search', async (req, res) => {
   try {
-    const { q } = req.query
+    let { q, branch_id } = req.query
     if (!q) return error(res, 'Query parameter q is required')
+
+    if (branch_id && req.user.role !== 'super_admin') branch_id = req.user.branch_id
+
+    if (branch_id) {
+      const { data: branchProducts, error: dbError } = await supabase
+        .from('branch_products')
+        .select('product_id, products(*)')
+        .eq('branch_id', branch_id)
+        .eq('is_active', true)
+
+      if (dbError) return error(res, 'Search failed', 500)
+
+      const lowerQ = q.toLowerCase()
+      const filtered = (branchProducts || [])
+        .filter(bp => bp.products?.is_active && bp.products.name.toLowerCase().includes(lowerQ))
+        .slice(0, 50)
+
+      const productIds = filtered.map(bp => bp.product_id)
+      const { data: stockRows } = await supabase
+        .from('stock')
+        .select('product_id, quantity, low_stock_threshold')
+        .eq('branch_id', branch_id)
+        .in('product_id', productIds)
+
+      const merged = filtered.map(bp => ({
+        ...bp.products,
+        stock: (stockRows || []).find(s => s.product_id === bp.product_id) || null
+      }))
+
+      return success(res, merged, 'Search results')
+    }
 
     const { data, error: dbError } = await supabase
       .from('products').select('*').eq('is_active', true).ilike('name', `%${q}%`).order('name', { ascending: true }).limit(50)
