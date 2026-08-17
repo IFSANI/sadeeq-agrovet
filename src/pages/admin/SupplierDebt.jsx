@@ -8,6 +8,9 @@ function SupplierDebt() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('unpaid')
   const [payingReceipt, setPayingReceipt] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
+  const [expandedDetail, setExpandedDetail] = useState(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
 
   const fetchReceipts = async () => {
     setLoading(true)
@@ -23,6 +26,23 @@ function SupplierDebt() {
 
   useEffect(() => { fetchReceipts() }, [filter])
 
+  const toggleExpand = async (receiptId) => {
+    if (expandedId === receiptId) {
+      setExpandedId(null)
+      setExpandedDetail(null)
+      return
+    }
+    setExpandedId(receiptId)
+    setLoadingDetail(true)
+    try {
+      const res = await api.get(`/api/stock/restock/${receiptId}`)
+      if (res.data.success) setExpandedDetail(res.data.data)
+    } catch {
+      toast.error('Failed to load payment history')
+    } finally {
+      setLoadingDetail(false)
+    }
+  }
   const totalOwed = receipts.reduce(
     (sum, r) => sum + (Number(r.total_cost || 0) - Number(r.amount_paid || 0)), 0
   )
@@ -30,6 +50,7 @@ function SupplierDebt() {
   const filters = [
     { id: 'unpaid', label: 'Unpaid' },
     { id: 'partial', label: 'Partial' },
+    { id: 'paid', label: 'Paid' },
   ]
 
   return (
@@ -84,31 +105,76 @@ function SupplierDebt() {
             <tbody>
               {receipts.map((r) => {
                 const owed = Number(r.total_cost || 0) - Number(r.amount_paid || 0)
+                const isExpanded = expandedId === r.id
                 return (
-                  <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-500">
-                      {new Date(r.created_at).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
-                    </td>
-                    <td className="px-4 py-3 text-gray-800">{r.suppliers?.name || 'No supplier'}</td>
-                    <td className="px-4 py-3 text-gray-600">{r.branches?.name || 'N/A'}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">
-                      ₦{Number(r.total_cost).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-600">
-                      ₦{Number(r.amount_paid || 0).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-red-500">
-                      ₦{owed.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setPayingReceipt(r)}
-                        className="text-xs font-semibold text-green-600 hover:text-green-700"
-                      >
-                        Record Payment
-                      </button>
-                    </td>
-                  </tr>
+                  <>
+                    <tr
+                      key={r.id}
+                      onClick={() => toggleExpand(r.id)}
+                      className="border-b border-gray-50 last:border-0 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <td className="px-4 py-3 text-gray-500">
+                        {new Date(r.created_at).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                      </td>
+                      <td className="px-4 py-3 text-gray-800">{r.suppliers?.name || 'No supplier'}</td>
+                      <td className="px-4 py-3 text-gray-600">{r.branches?.name || 'N/A'}</td>
+                      <td className="px-4 py-3 text-right text-gray-600">
+                        ₦{Number(r.total_cost).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-600">
+                        ₦{Number(r.amount_paid || 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-red-500">
+                        ₦{owed.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {owed > 0 && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setPayingReceipt(r) }}
+                            className="text-xs font-semibold text-green-600 hover:text-green-700"
+                          >
+                            Record Payment
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-gray-50">
+                        <td colSpan={7} className="px-4 py-4">
+                          {loadingDetail ? (
+                            <div className="flex justify-center py-4">
+                              <span className="w-5 h-5 border-4 border-green-400 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 mb-2">Payment History</p>
+                              {(!expandedDetail?.payments || expandedDetail.payments.length === 0) ? (
+                                <p className="text-xs text-gray-400">No payments recorded yet</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {expandedDetail.payments.map((p, i) => (
+                                    <div key={i} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-2 border border-gray-100">
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-gray-500">
+                                          {new Date(p.created_at).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                                        </span>
+                                        <span className="capitalize text-gray-600">{p.payment_method}</span>
+                                        {p.reference && <span className="text-gray-400">Ref: {p.reference}</span>}
+                                        <span className="text-gray-400">by {p.users?.name || 'Unknown'}</span>
+                                      </div>
+                                      <span className="font-semibold text-gray-800">
+                                        ₦{Number(p.amount).toLocaleString()}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 )
               })}
             </tbody>
@@ -123,6 +189,10 @@ function SupplierDebt() {
           onSaved={() => {
             setPayingReceipt(null)
             fetchReceipts()
+            if (expandedId === payingReceipt.id) {
+              setExpandedId(null)
+              setExpandedDetail(null)
+            }
           }}
         />
       )}

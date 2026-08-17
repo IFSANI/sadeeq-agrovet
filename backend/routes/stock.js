@@ -180,7 +180,32 @@ router.post('/restock/:id/pay', requireRole('super_admin', 'admin'), async (req,
     return error(res, 'Server error', 500)
   }
 })
+router.get('/restock/:id', async (req, res) => {
+  try {
+    const { id } = req.params
 
+    const { data: receipt, error: dbError } = await supabase
+      .from('stock_receipts')
+      .select('*, branches(name), suppliers(name), users:received_by(name), stock_receipt_items(*, products(name)))')
+      .eq('id', id).single()
+
+    if (dbError || !receipt) return error(res, 'Stock receipt not found', 404)
+
+    if (req.user.role !== 'super_admin' && receipt.branch_id !== req.user.branch_id) {
+      return error(res, 'Unauthorized', 403)
+    }
+
+    const { data: payments } = await supabase
+      .from('stock_receipt_payments')
+      .select('*, users:paid_by(name)')
+      .eq('stock_receipt_id', id)
+      .order('created_at', { ascending: false })
+
+    return success(res, { ...receipt, payments: payments || [] }, 'Stock receipt fetched')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 router.get('/transfer', async (req, res) => {
   try {
     const { status } = req.query
