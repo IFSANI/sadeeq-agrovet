@@ -18,6 +18,8 @@ import LooseCart from './pages/cashier/LooseCart'
 import CashierDashboard from './pages/cashier/CashierDashboard'
 import CreditDebt from './pages/admin/CreditDebt'
 import CustomerDetail from './pages/admin/CustomerDetail'
+import SupplierDebt from './pages/admin/SupplierDebt'
+
 function ComingSoon({ title }) {
   return (
     <div className="flex items-center justify-center h-64">
@@ -154,7 +156,12 @@ function App() {
         <Route path="/cashier/credit" element={
           <ProtectedRoute allowed={['cashier']}><CashierPage><CreditDebt /></CashierPage></ProtectedRoute>
         } />
+        <Route path="/admin/supplier-debt" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><SupplierDebt /></AdminPage></ProtectedRoute>
+        } />
       </Routes>
+
+      
     </BrowserRouter>
   )
 }

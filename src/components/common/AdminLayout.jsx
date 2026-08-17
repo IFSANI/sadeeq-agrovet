@@ -54,6 +54,7 @@ const navItems = [
       { label: 'Branches', icon: GitBranch, path: '/admin/branches', roles: ['super_admin'] },
       { label: 'Expenses', icon: Wallet, path: '/admin/expenses', roles: ['super_admin', 'admin'] },
       { label: 'Reports', icon: BarChart2, path: '/admin/reports', roles: ['super_admin', 'admin'] },
+      { label: 'Supplier Debt', icon: Wallet, path: '/admin/supplier-debt', roles: ['super_admin', 'admin'] },
       { label: 'Settings', icon: Settings, path: '/admin/settings', roles: ['super_admin'] },
     ]
   },

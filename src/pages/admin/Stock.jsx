@@ -249,6 +249,8 @@ function RestockModal({ branches, suppliers, defaultBranchId, isSuperAdmin, user
     branch_id: isSuperAdmin ? (defaultBranchId || '') : (userBranchId || ''),
     supplier_id: '',
     notes: '',
+    amount_paid_now: '',
+    payment_method_now: 'cash',
   })
   const [items, setItems] = useState([{ product_id: '', quantity: '', cost_price: '' }])
   const [products, setProducts] = useState([])
@@ -280,12 +282,15 @@ function RestockModal({ branches, suppliers, defaultBranchId, isSuperAdmin, user
     if (items.some((i) => !i.product_id || !i.quantity || !i.cost_price)) {
       return toast.error('Fill all item fields')
     }
+    const total_cost = items.reduce(
+      (sum, i) => sum + Number(i.quantity) * Number(i.cost_price), 0
+    )
+    if (form.amount_paid_now && Number(form.amount_paid_now) > total_cost) {
+      return toast.error('Amount paid now cannot exceed the total cost')
+    }
     setSaving(true)
     try {
-      const total_cost = items.reduce(
-        (sum, i) => sum + Number(i.quantity) * Number(i.cost_price), 0
-      )
-      const res = await api.post('/api/stock/restock', {
+      const payload = {
         branch_id: form.branch_id,
         supplier_id: form.supplier_id || null,
         notes: form.notes,
@@ -295,7 +300,13 @@ function RestockModal({ branches, suppliers, defaultBranchId, isSuperAdmin, user
           quantity: Number(i.quantity),
           cost_price: Number(i.cost_price),
         })),
-      })
+      }
+      if (form.amount_paid_now) {
+        payload.amount_paid_now = Number(form.amount_paid_now)
+        payload.payment_method_now = form.payment_method_now
+      }
+
+      const res = await api.post('/api/stock/restock', payload)
       if (res.data.success) onSaved()
       else toast.error(res.data.message || 'Failed to restock')
     } catch (err) {
@@ -423,6 +434,44 @@ function RestockModal({ branches, suppliers, defaultBranchId, isSuperAdmin, user
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
             />
           </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Amount Paying Supplier Now (₦)
+            </label>
+            <input
+              type="number"
+              value={form.amount_paid_now}
+              onChange={(e) => setForm({ ...form, amount_paid_now: e.target.value })}
+              placeholder="Leave blank if paying nothing now"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Whatever's left of the total cost stays owed to the supplier
+            </p>
+          </div>
+
+          {form.amount_paid_now && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-2">Paying Via</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['cash', 'transfer', 'pos'].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setForm({ ...form, payment_method_now: m })}
+                    className={`py-2 rounded-xl border-2 text-xs font-semibold capitalize transition ${
+                      form.payment_method_now === m
+                        ? 'bg-green-50 border-green-400 text-green-700'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button

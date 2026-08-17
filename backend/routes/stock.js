@@ -73,8 +73,8 @@ router.get('/low-stock', async (req, res) => {
 
 router.get('/restock', async (req, res) => {
   try {
-    let { branch, from, to } = req.query
-      if (req.user.role !== 'super_admin') branch = req.user.branch_id
+    let { branch, from, to, payment_status } = req.query
+    if (req.user.role !== 'super_admin') branch = req.user.branch_id
     let query = supabase
       .from('stock_receipts')
       .select('*, branches(name), suppliers(name), users:received_by(name), stock_receipt_items(*, products(name))')
@@ -83,6 +83,7 @@ router.get('/restock', async (req, res) => {
     if (branch) query = query.eq('branch_id', branch)
     if (from) query = query.gte('created_at', from)
     if (to) query = query.lte('created_at', to)
+    if (payment_status) query = query.eq('payment_status', payment_status)
 
     const { data, error: dbError } = await query
     if (dbError) return error(res, 'Could not fetch restock history', 500)
@@ -94,13 +95,10 @@ router.get('/restock', async (req, res) => {
 
 router.post('/restock', requireRole('super_admin', 'admin'), async (req, res) => {
   try {
-    let { branch_id, supplier_id, notes, items } = req.body
-
-      if (!branch_id) return error(res, 'branch_id is required')
-      if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
-
+    let { branch_id, supplier_id, notes, items, amount_paid_now } = req.body
 
     if (!branch_id) return error(res, 'branch_id is required')
+    if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
     if (!Array.isArray(items) || items.length === 0) return error(res, 'items array is required')
     for (const item of items) {
       if (!item.product_id || !item.quantity || item.cost_price === undefined) {
@@ -109,11 +107,19 @@ router.post('/restock', requireRole('super_admin', 'admin'), async (req, res) =>
     }
 
     const total_cost = items.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.cost_price)), 0)
+      const amountPaid = amount_paid_now ? Number(amount_paid_now) : 0
+      const paymentStatus = amountPaid >= total_cost ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid')
 
-    const { data: receipt, error: receiptErr } = await supabase
-      .from('stock_receipts')
-      .insert({ branch_id, supplier_id: supplier_id || null, received_by: req.user.id, total_cost, notes: notes || null })
-      .select().single()
+      const { data: receipt, error: receiptErr } = await supabase
+        .from('stock_receipts')
+        .insert({ branch_id, supplier_id: supplier_id || null, received_by: req.user.id, total_cost, notes: notes || null, amount_paid: amountPaid, payment_status: paymentStatus })
+        .select().single()
+
+      if (amountPaid > 0 && !receiptErr) {
+        await supabase.from('stock_receipt_payments').insert({
+          stock_receipt_id: receipt.id, amount: amountPaid, payment_method: 'cash', paid_by: req.user.id
+        })
+      }
 
     if (receiptErr) return error(res, 'Could not create stock receipt', 500)
 
@@ -135,6 +141,41 @@ router.post('/restock', requireRole('super_admin', 'admin'), async (req, res) =>
 
     await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'create', entity_type: 'stock_receipt', entity_id: receipt.id, new_value: receipt })
     return success(res, { ...receipt, items }, 'Stock received and updated')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
+router.post('/restock/:id/pay', requireRole('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { amount, payment_method, reference } = req.body
+    if (!amount || amount <= 0) return error(res, 'A valid amount is required')
+    if (!payment_method) return error(res, 'payment_method is required')
+
+    const { data: receiptRow } = await supabase.from('stock_receipts').select('*').eq('id', id).single()
+    if (!receiptRow) return error(res, 'Stock receipt not found', 404)
+
+    const outstanding = Number(receiptRow.total_cost) - Number(receiptRow.amount_paid)
+    if (Number(amount) > outstanding) return error(res, 'Amount exceeds the outstanding balance for this restock')
+
+    const newAmountPaid = Number(receiptRow.amount_paid) + Number(amount)
+    const newStatus = newAmountPaid >= Number(receiptRow.total_cost) ? 'paid' : 'partial'
+
+    const { data: updated, error: dbError } = await supabase
+      .from('stock_receipts')
+      .update({ amount_paid: newAmountPaid, payment_status: newStatus })
+      .eq('id', id).select().single()
+
+    if (dbError) return error(res, 'Could not record payment', 500)
+
+    await supabase.from('stock_receipt_payments').insert({
+      stock_receipt_id: id, amount, payment_method, reference: reference || null, paid_by: req.user.id
+    })
+
+    await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'pay_supplier', entity_type: 'stock_receipt', entity_id: id, new_value: { amount, newAmountPaid } })
+
+    return success(res, updated, 'Supplier payment recorded')
   } catch (err) {
     return error(res, 'Server error', 500)
   }
