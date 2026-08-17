@@ -16,7 +16,8 @@ import SalesHistory from './pages/admin/SalesHistory'
 import Customers from './pages/admin/Customers'
 import LooseCart from './pages/cashier/LooseCart'
 import CashierDashboard from './pages/cashier/CashierDashboard'
-
+import CreditDebt from './pages/admin/CreditDebt'
+import CustomerDetail from './pages/admin/CustomerDetail'
 function ComingSoon({ title }) {
   return (
     <div className="flex items-center justify-center h-64">
@@ -107,7 +108,7 @@ function App() {
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Chick Bookings" /></ProtectedRoute>
         } />
         <Route path="/admin/credit" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Credit & Debt" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><CreditDebt /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/expenses" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Expenses" /></ProtectedRoute>
@@ -126,6 +127,9 @@ function App() {
         } />
         <Route path="/admin/customers" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Customers /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/customers/:id" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><CustomerDetail /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/cart" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><LooseCart /></AdminPage></ProtectedRoute>
@@ -147,7 +151,9 @@ function App() {
         <Route path="/cashier/customers" element={
           <ProtectedRoute allowed={['cashier']}><CashierPage><Customers /></CashierPage></ProtectedRoute>
         } />
-
+        <Route path="/cashier/credit" element={
+          <ProtectedRoute allowed={['cashier']}><CashierPage><CreditDebt /></CashierPage></ProtectedRoute>
+        } />
       </Routes>
     </BrowserRouter>
   )

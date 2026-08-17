@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, ShoppingCart, Receipt, Users, LogOut, Menu, X
+  LayoutDashboard, ShoppingCart, Receipt, Users, Wallet, LogOut, Menu, X
 } from 'lucide-react'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
@@ -12,6 +12,7 @@ const navItems = [
   { label: 'Loose Cart', icon: ShoppingCart, path: '/cashier/cart' },
   { label: "Today's Sales", icon: Receipt, path: '/cashier/sales' },
   { label: 'Customers', icon: Users, path: '/cashier/customers' },
+  { label: 'Credit & Debt', icon: Wallet, path: '/cashier/credit' },
 ]
 
 function CashierLayout({ children }) {
