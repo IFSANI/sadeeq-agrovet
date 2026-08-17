@@ -164,13 +164,32 @@ router.delete('/:id/items/:itemId', async (req, res) => {
 router.put('/:id/close', async (req, res) => {
   try {
     const { id: cart_id } = req.params
-    const { payment_method, customer_id } = req.body
+    const { payment_method, customer_id, items } = req.body
     if (!payment_method) return error(res, 'payment_method is required')
 
     const { data: cart } = await supabase.from('loose_sale_carts').select('*, cart_items(*)').eq('id', cart_id).single()
     if (!cart) return error(res, 'Cart not found', 404)
     if (cart.status !== 'open') return error(res, 'Cart is already closed')
     if (cart.cart_items.length === 0) return error(res, 'Cannot close an empty cart')
+
+    if (Array.isArray(items) && items.length > 0) {
+      for (const update of items) {
+        if (!update.cart_item_id || update.remaining_quantity === undefined) {
+          return error(res, 'Each item needs cart_item_id and remaining_quantity')
+        }
+        const matching = cart.cart_items.find(ci => ci.id === update.cart_item_id)
+        if (!matching) return error(res, `cart_item_id ${update.cart_item_id} does not belong to this cart`)
+        if (Number(update.remaining_quantity) < 0 || Number(update.remaining_quantity) > Number(matching.initial_quantity)) {
+          return error(res, `remaining_quantity for ${update.cart_item_id} must be between 0 and its initial quantity`)
+        }
+      }
+
+      for (const update of items) {
+        await supabase.from('cart_items').update({ remaining_quantity: update.remaining_quantity }).eq('id', update.cart_item_id)
+        const target = cart.cart_items.find(ci => ci.id === update.cart_item_id)
+        target.remaining_quantity = update.remaining_quantity
+      }
+    }
 
     const soldItems = cart.cart_items
       .map(item => ({ ...item, sold: Number(item.initial_quantity) - Number(item.remaining_quantity) }))

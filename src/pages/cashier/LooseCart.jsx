@@ -288,14 +288,39 @@ function CloseCartModal({ cart, onClose, onClosed }) {
   const [remaining, setRemaining] = useState(
     Object.fromEntries((cart.cart_items || []).map((item) => [item.id, '']))
   )
+  const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerResults, setCustomerResults] = useState([])
   const [saving, setSaving] = useState(false)
+
+  const methods = ['cash', 'transfer', 'pos', 'credit']
 
   const handleChange = (itemId, value) => {
     setRemaining({ ...remaining, [itemId]: value })
   }
 
+  useEffect(() => {
+    if (customerSearch.length < 2) { setCustomerResults([]); return }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/customers/search', { params: { q: customerSearch } })
+        if (res.data.success) setCustomerResults(res.data.data)
+      } catch {
+        // silent
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [customerSearch])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    if (paymentMethod === 'credit' && !selectedCustomer) {
+      toast.error('Select a customer for credit sales')
+      return
+    }
+
     const items = cart.cart_items.map((item) => ({
       cart_item_id: item.id,
       remaining_quantity: Number(remaining[item.id] || 0),
@@ -309,13 +334,21 @@ function CloseCartModal({ cart, onClose, onClosed }) {
 
     setSaving(true)
     try {
-      const res = await api.post(`/api/carts/${cart.id}/close`, { items })
+      const payload = {
+        payment_method: paymentMethod,
+        items,
+      }
+      if (paymentMethod === 'credit') {
+        payload.customer_id = selectedCustomer.id
+      }
+
+      const res = await api.put(`/api/carts/${cart.id}/close`, payload)
       if (res.data.success) {
         toast.success('Cart closed and sale recorded!')
         onClosed()
       }
-    } catch {
-      toast.error('Failed to close cart')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to close cart')
     } finally {
       setSaving(false)
     }
@@ -353,6 +386,71 @@ function CloseCartModal({ cart, onClose, onClosed }) {
               />
             </div>
           ))}
+
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-sm font-medium text-gray-600 mb-2">Payment Method</label>
+            <div className="grid grid-cols-4 gap-2">
+              {methods.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPaymentMethod(m)}
+                  className={`py-2 rounded-xl border-2 text-xs font-semibold capitalize transition ${
+                    paymentMethod === m
+                      ? 'bg-green-50 border-green-400 text-green-700'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {paymentMethod === 'credit' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Customer *</label>
+              {selectedCustomer ? (
+                <div className="bg-green-50 rounded-xl p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{selectedCustomer.name}</p>
+                    <p className="text-xs text-gray-500">{selectedCustomer.phone}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedCustomer(null); setCustomerSearch('') }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    placeholder="Search name or phone"
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                  />
+                  {customerResults.length > 0 && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl mt-1 shadow-lg max-h-40 overflow-y-auto">
+                      {customerResults.map((c) => (
+                        <button
+                          type="button"
+                          key={c.id}
+                          onClick={() => { setSelectedCustomer(c); setCustomerResults([]) }}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition"
+                        >
+                          <p className="font-medium text-gray-800">{c.name}</p>
+                          <p className="text-xs text-gray-400">{c.phone}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button

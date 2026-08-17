@@ -372,7 +372,7 @@ function AssignBranchModal({ productId, product, branches, suppliers, onClose, o
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
             />
             <p className="text-xs text-gray-400 mt-1">
-              Leave blank if unknown. Needed later for profit reports — recommended to fill in if you have it.
+              Leave blank if unknown.  — recommended to fill in if you have it.
             </p>
           </div>
 
