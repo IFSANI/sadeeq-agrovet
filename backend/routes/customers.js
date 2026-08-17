@@ -10,7 +10,10 @@ router.use(requireAuth)
 
 router.get('/', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
   try {
-    const { data, error: dbError } = await supabase.from('customers').select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at').order('name', { ascending: true })
+    const { data, error: dbError } = await supabase
+      .from('customers')
+      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status)')
+      .order('name', { ascending: true })
     if (dbError) return error(res, 'Could not fetch customers', 500)
     return success(res, data, 'Customers fetched')
   } catch (err) {
@@ -46,7 +49,9 @@ router.get('/search', requireRole('super_admin', 'admin', 'cashier'), async (req
     if (!q) return error(res, 'Query parameter q is required')
 
     const { data, error: dbError } = await supabase
-      .from('customers').select('*').or(`name.ilike.%${q}%,phone.ilike.%${q}%`).limit(50)
+  .from('customers')
+  .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status)')
+  .or(`name.ilike.%${q}%,phone.ilike.%${q}%`).limit(50)
 
     if (dbError) return error(res, 'Search failed', 500)
     return success(res, data, 'Search results')
@@ -57,7 +62,10 @@ router.get('/search', requireRole('super_admin', 'admin', 'cashier'), async (req
 
 router.get('/:id', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
   try {
-    const { data, error: dbError } = await supabase.from('customers').select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at').eq('id', req.params.id).single()
+    const { data, error: dbError } = await supabase
+      .from('customers')
+      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status)')
+      .eq('id', req.params.id).single()
     if (dbError || !data) return error(res, 'Customer not found', 404)
     return success(res, data, 'Customer fetched')
   } catch (err) {

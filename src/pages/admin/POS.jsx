@@ -351,7 +351,7 @@ function POS() {
           total={total}
           branchId={activeBranchId}
           cashierId={user?.id}
-          customerId={selectedCustomer?.id}
+          customer={selectedCustomer}
           isWholesale={isWholesale}
           getItemPrice={getItemPrice}
           onClose={() => setShowPayment(false)}
@@ -533,28 +533,86 @@ function CustomerPicker({ selectedCustomer, onSelect }) {
 }
 
 // Payment Modal
-function PaymentModal({ cartItems, total, branchId, cashierId, customerId, isWholesale, getItemPrice, onClose, onSuccess }) {
+function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWholesale, getItemPrice, onClose, onSuccess }) {
   const [method, setMethod] = useState(null)
   const [processing, setProcessing] = useState(false)
+  const [creditAccount, setCreditAccount] = useState(customer?.credit_account || null)
+  const [showOpenCredit, setShowOpenCredit] = useState(false)
+  const [creditLimit, setCreditLimit] = useState('')
+  const [openingCredit, setOpeningCredit] = useState(false)
+  const [amountPaidNow, setAmountPaidNow] = useState('')
+  const [methodNow, setMethodNow] = useState('cash')
 
-  const methods = ['Cash', 'Transfer', 'POS', 'Credit']
+  const methods = ['Cash', 'Transfer', 'POS', 'Credit', 'Split']
+  const needsCustomer = method === 'Credit' || method === 'Split'
+  const remainingOnCredit = method === 'Split' ? Math.max(total - Number(amountPaidNow || 0), 0) : total
 
   const methodColors = {
     Cash: 'bg-green-50 border-green-300 text-green-700',
     Transfer: 'bg-blue-50 border-blue-300 text-blue-700',
     POS: 'bg-purple-50 border-purple-300 text-purple-700',
     Credit: 'bg-orange-50 border-orange-300 text-orange-700',
+    Split: 'bg-pink-50 border-pink-300 text-pink-700',
+  }
+
+  const handleOpenCredit = async () => {
+    if (!customer) return
+    if (!creditLimit || Number(creditLimit) <= 0) {
+      toast.error('Enter a valid credit limit')
+      return
+    }
+    setOpeningCredit(true)
+    try {
+      const res = await api.put(`/api/customers/${customer.id}/credit/limit`, {
+        credit_limit: Number(creditLimit),
+      })
+      if (res.data.success) {
+        toast.success('Credit account opened!')
+        setCreditAccount(res.data.data.credit_account || res.data.data)
+        setShowOpenCredit(false)
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to open credit account')
+    } finally {
+      setOpeningCredit(false)
+    }
+  }
+
+  const confirmUpfrontPayment = async (saleId, amount, paymentMethod) => {
+    if (paymentMethod === 'cash') return confirmCashPayment(saleId, amount)
+    if (paymentMethod === 'transfer') return confirmTransferPayment(saleId)
+    if (paymentMethod === 'pos') return confirmPOSPayment(saleId)
   }
 
   const handleCompleteSale = async () => {
     if (!method) return
+
+    if (needsCustomer && !customer) {
+      toast.error('Select a customer first for credit/split payment')
+      return
+    }
+    if (needsCustomer && !creditAccount) {
+      toast.error('This customer has no credit account yet — open one first')
+      return
+    }
+    if (method === 'Split') {
+      if (!amountPaidNow || Number(amountPaidNow) <= 0) {
+        toast.error('Enter the amount being paid now')
+        return
+      }
+      if (Number(amountPaidNow) >= total) {
+        toast.error('Amount paid now must be less than the total — use Cash/Transfer/POS instead if paying in full')
+        return
+      }
+    }
+
     setProcessing(true)
 
     try {
       const salePayload = {
         branch_id: branchId,
         cashier_id: cashierId,
-        customer_id: customerId || null,
+        customer_id: customer?.id || null,
         payment_method: method.toLowerCase(),
         total_amount: total,
         is_wholesale: isWholesale,
@@ -564,6 +622,11 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customerId, isWho
           unit_price: getItemPrice(item),
           subtotal: getItemPrice(item) * item.quantity,
         })),
+      }
+
+      if (method === 'Split') {
+        salePayload.amount_paid_now = Number(amountPaidNow)
+        salePayload.payment_method_now = methodNow
       }
 
       const saleRes = await createSale(salePayload)
@@ -583,17 +646,19 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customerId, isWho
         paymentRes = await confirmPOSPayment(saleId)
       } else if (method === 'Credit') {
         paymentRes = saleRes
+      } else if (method === 'Split') {
+        paymentRes = await confirmUpfrontPayment(saleId, Number(amountPaidNow), methodNow)
       }
 
       if (paymentRes?.success) {
         toast.success('Sale completed!')
-        onSuccess(paymentRes.data.sale)
+        onSuccess(paymentRes.data.sale || saleRes.data)
       } else {
         toast.error('Payment confirmation failed')
       }
 
-    } catch {
-      toast.error('Something went wrong')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Something went wrong')
     } finally {
       setProcessing(false)
     }
@@ -601,7 +666,7 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customerId, isWho
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
 
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-800">Payment</h2>
@@ -656,16 +721,101 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customerId, isWho
           </div>
         )}
 
-        {method === 'Credit' && (
+        {needsCustomer && !customer && (
+          <div className="mb-4 bg-red-50 rounded-xl p-4 text-sm text-red-600">
+            <p className="font-medium">No customer selected.</p>
+            <p className="mt-1 text-xs">Go back and search/attach a customer before using Credit or Split.</p>
+          </div>
+        )}
+
+        {needsCustomer && customer && !creditAccount && (
           <div className="mb-4 bg-orange-50 rounded-xl p-4 text-sm text-orange-700">
-            <p className="font-medium">Search for customer account to add debt.</p>
-            <p className="mt-1 text-xs">Customer credit management coming soon.</p>
+            <p className="font-medium mb-2">{customer.name} has no credit account yet.</p>
+            {!showOpenCredit ? (
+              <button
+                type="button"
+                onClick={() => setShowOpenCredit(true)}
+                className="text-xs font-semibold text-orange-700 underline"
+              >
+                Open credit account now
+              </button>
+            ) : (
+              <div className="space-y-2 mt-2">
+                <input
+                  type="number"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(e.target.value)}
+                  placeholder="Set credit limit (₦)"
+                  className="w-full px-3 py-2 border border-orange-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleOpenCredit}
+                  disabled={openingCredit}
+                  className="w-full py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-60"
+                >
+                  {openingCredit ? 'Opening...' : 'Open Credit Account'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {needsCustomer && customer && creditAccount && (
+          <div className="mb-4 bg-orange-50 rounded-xl p-3 text-sm text-orange-700 flex justify-between">
+            <span>Current balance: ₦{Number(creditAccount.current_balance).toLocaleString()}</span>
+            <span>Limit: ₦{Number(creditAccount.credit_limit).toLocaleString()}</span>
+          </div>
+        )}
+
+        {method === 'Credit' && customer && creditAccount && (
+          <div className="mb-4 bg-orange-50 rounded-xl p-4 text-sm text-orange-700">
+            <p className="font-medium">Entire amount goes on credit:</p>
+            <p className="text-2xl font-bold mt-1">₦{total.toLocaleString()}</p>
+          </div>
+        )}
+
+        {method === 'Split' && customer && creditAccount && (
+          <div className="mb-4 space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Amount Paying Now (₦)</label>
+              <input
+                type="number"
+                value={amountPaidNow}
+                onChange={(e) => setAmountPaidNow(e.target.value)}
+                placeholder={`Less than ${total.toLocaleString()}`}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-2">Paying Via</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['cash', 'transfer', 'pos'].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMethodNow(m)}
+                    className={`py-2 rounded-xl border-2 text-xs font-semibold capitalize transition ${
+                      methodNow === m
+                        ? 'bg-pink-50 border-pink-400 text-pink-700'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bg-pink-50 rounded-xl p-3 text-sm text-pink-700 flex justify-between">
+              <span>Remaining on credit</span>
+              <span className="font-bold">₦{remainingOnCredit.toLocaleString()}</span>
+            </div>
           </div>
         )}
 
         <button
           onClick={handleCompleteSale}
-          disabled={!method || processing}
+          disabled={!method || processing || (needsCustomer && (!customer || !creditAccount))}
           className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {processing

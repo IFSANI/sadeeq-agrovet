@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    let { branch_id, customer_id, payment_method, items, offline_id } = req.body
+    let { branch_id, customer_id, payment_method, items, offline_id, amount_paid_now, payment_method_now } = req.body
 
     if (!branch_id) return error(res, 'branch_id is required')
     if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
@@ -68,8 +68,12 @@ router.post('/', async (req, res) => {
         return error(res, 'Each item needs product_id, quantity and unit_price')
       }
     }
-    if (payment_method === 'credit' && !customer_id) {
-      return error(res, 'customer_id is required for credit sales')
+    if (['credit', 'split'].includes(payment_method) && !customer_id) {
+      return error(res, 'customer_id is required for credit and split sales')
+    }
+    if (payment_method === 'split') {
+      if (!amount_paid_now || amount_paid_now <= 0) return error(res, 'amount_paid_now is required for split sales')
+      if (!['cash', 'transfer', 'pos'].includes(payment_method_now)) return error(res, 'payment_method_now must be cash, transfer or pos')
     }
 
     if (offline_id) {
@@ -87,11 +91,14 @@ router.post('/', async (req, res) => {
     const total_amount = items.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.unit_price)), 0)
 
     let creditAccount = null
-    if (payment_method === 'credit') {
+    let creditPortion = total_amount
+    if (payment_method === 'split') creditPortion = total_amount - Number(amount_paid_now)
+
+    if (['credit', 'split'].includes(payment_method)) {
       const { data: account } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
       if (!account) return error(res, 'Customer has no credit account')
       if (account.status !== 'active') return error(res, 'Customer credit account is suspended')
-      if (Number(account.current_balance) + total_amount > Number(account.credit_limit)) {
+      if (Number(account.current_balance) + creditPortion > Number(account.credit_limit)) {
         return error(res, 'This sale would exceed the customer\'s credit limit')
       }
       creditAccount = account
@@ -105,7 +112,7 @@ router.post('/', async (req, res) => {
         customer_id: customer_id || null,
         payment_method,
         total_amount,
-        amount_paid: payment_method === 'credit' ? total_amount : null,
+        amount_paid: payment_method === 'credit' ? total_amount : (payment_method === 'split' ? amount_paid_now : null),
         payment_status: payment_method === 'credit' ? 'paid' : 'pending',
         status: 'completed',
         sale_type: 'regular',
@@ -128,11 +135,11 @@ router.post('/', async (req, res) => {
       await supabase.from('stock').update({ quantity: Number(stockRow.quantity) - Number(item.quantity), updated_at: new Date() }).eq('id', stockRow.id)
     }
 
-    if (payment_method === 'credit' && creditAccount) {
-      const newBalance = Number(creditAccount.current_balance) + total_amount
+    if (['credit', 'split'].includes(payment_method) && creditAccount) {
+      const newBalance = Number(creditAccount.current_balance) + creditPortion
       await supabase.from('credit_accounts').update({ current_balance: newBalance }).eq('id', creditAccount.id)
       await supabase.from('credit_transactions').insert({
-        credit_account_id: creditAccount.id, type: 'debit', amount: total_amount, sale_id: sale.id, balance_after: newBalance
+        credit_account_id: creditAccount.id, type: 'debit', amount: creditPortion, sale_id: sale.id, balance_after: newBalance
       })
     }
 

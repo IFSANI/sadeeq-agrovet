@@ -16,7 +16,7 @@ router.get('/:id/credit', requireRole('super_admin', 'admin', 'cashier'), async 
   }
 })
 
-router.put('/:id/credit/limit', requireRole('super_admin', 'admin'), async (req, res) => {
+router.put('/:id/credit/limit', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
     const { credit_limit } = req.body
@@ -25,9 +25,15 @@ router.put('/:id/credit/limit', requireRole('super_admin', 'admin'), async (req,
     const { data: customer } = await supabase.from('customers').select('id').eq('id', customer_id).single()
     if (!customer) return error(res, 'Customer not found', 404)
 
+    const { data: existingAccount } = await supabase.from('credit_accounts').select('id').eq('customer_id', customer_id).maybeSingle()
+
     const { data: account, error: dbError } = await supabase
       .from('credit_accounts')
-      .upsert({ customer_id, credit_limit }, { onConflict: 'customer_id' })
+      .upsert({
+        customer_id,
+        credit_limit,
+        ...(existingAccount ? {} : { opened_by: req.user.id })
+      }, { onConflict: 'customer_id' })
       .select().single()
 
     if (dbError) return error(res, 'Could not set credit limit', 500)
