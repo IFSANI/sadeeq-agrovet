@@ -11,31 +11,38 @@ async function confirmPayment(req, res, expectedMethod) {
     if (!['super_admin', 'admin', 'cashier'].includes(req.user.role)) {
       return error(res, 'Unauthorized', 403)
     }
+
     const { sale_id, reference, amount_paid } = req.body
     if (!sale_id) return error(res, 'sale_id is required')
 
     const { data: sale } = await supabase.from('sales').select('*').eq('id', sale_id).single()
     if (!sale) return error(res, 'Sale not found', 404)
-    if (sale.payment_method !== expectedMethod) return error(res, `This sale was not created as a ${expectedMethod} sale`)
+
+    const isSplit = sale.payment_method === 'split'
+    const actualMethod = isSplit ? sale.payment_method_now : sale.payment_method
+    if (actualMethod !== expectedMethod) return error(res, `This sale was not created as a ${expectedMethod} sale`)
     if (sale.payment_status === 'paid') return error(res, 'This sale has already been paid')
 
-    const paidAmount = expectedMethod === 'cash' ? amount_paid : sale.total_amount
+    const amountOwed = isSplit ? Number(sale.amount_paid) : Number(sale.total_amount)
+
     if (expectedMethod === 'cash') {
       if (!amount_paid) return error(res, 'amount_paid is required')
-      if (Number(amount_paid) < Number(sale.total_amount)) return error(res, 'amount_paid is less than the sale total')
+      if (Number(amount_paid) < amountOwed) return error(res, 'amount_paid is less than the amount due')
     }
+
+    const paidAmount = expectedMethod === 'cash' ? Number(amount_paid) : amountOwed
 
     const { data: payment, error: payErr } = await supabase
       .from('payments')
       .insert({
-        sale_id, amount: sale.total_amount, payment_method: expectedMethod,
+        sale_id, amount: amountOwed, payment_method: expectedMethod,
         reference: reference || null, confirmed_by: req.user.id
       })
       .select().single()
 
     if (payErr) return error(res, 'Could not record payment', 500)
 
-    const changeGiven = expectedMethod === 'cash' ? Number(amount_paid) - Number(sale.total_amount) : 0
+    const changeGiven = expectedMethod === 'cash' ? paidAmount - amountOwed : 0
 
     const { error: saleErr } = await supabase
       .from('sales')
@@ -58,6 +65,7 @@ async function confirmPayment(req, res, expectedMethod) {
     return error(res, 'Server error', 500)
   }
 }
+
 
 router.post('/cash', (req, res) => confirmPayment(req, res, 'cash'))
 router.post('/transfer/confirm', (req, res) => confirmPayment(req, res, 'transfer'))

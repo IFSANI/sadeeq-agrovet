@@ -111,6 +111,7 @@ router.post('/', async (req, res) => {
         cashier_id: req.user.id,
         customer_id: customer_id || null,
         payment_method,
+        payment_method_now: payment_method === 'split' ? payment_method_now : null,
         total_amount,
         amount_paid: payment_method === 'credit' ? total_amount : (payment_method === 'split' ? amount_paid_now : null),
         payment_status: payment_method === 'credit' ? 'paid' : 'pending',
