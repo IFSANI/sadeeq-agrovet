@@ -19,6 +19,7 @@ import CashierDashboard from './pages/cashier/CashierDashboard'
 import CreditDebt from './pages/admin/CreditDebt'
 import CustomerDetail from './pages/admin/CustomerDetail'
 import SupplierDebt from './pages/admin/SupplierDebt'
+import Expenses from './pages/admin/Expenses'
 
 function ComingSoon({ title }) {
   return (
@@ -113,7 +114,7 @@ function App() {
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><CreditDebt /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/expenses" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Expenses" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Expenses /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/reports" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Reports" /></ProtectedRoute>

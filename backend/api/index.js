@@ -14,6 +14,7 @@ import cartRoutes from '../routes/carts.js'
 import chickRoutes from '../routes/chicks.js'
 import settingsRoutes from '../routes/settings.js'
 import creditRoutes from '../routes/credit.js'
+import expenseRoutes from '../routes/expenses.js'
 
 const app = express()
 app.use(cors())
@@ -32,5 +33,6 @@ app.use('/api/payments', paymentRoutes)
 app.use('/api/carts', cartRoutes)
 app.use('/api/chicks', chickRoutes)
 app.use('/api/settings', settingsRoutes)
+app.use('/api/expenses', expenseRoutes)
 
 export default app
