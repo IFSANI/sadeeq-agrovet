@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Truck, AlertCircle } from 'lucide-react'
+import { Truck, AlertCircle, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import useAuthStore from '../../store/authStore'
 
 function SupplierDebt() {
   const [receipts, setReceipts] = useState([])
@@ -11,6 +12,10 @@ function SupplierDebt() {
   const [expandedId, setExpandedId] = useState(null)
   const [expandedDetail, setExpandedDetail] = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [suppliers, setSuppliers] = useState([])
+  const [showOpeningBalance, setShowOpeningBalance] = useState(false)
+  const { user } = useAuthStore()
+  const isSuperAdmin = user?.role === 'super_admin'
 
   const fetchReceipts = async () => {
     setLoading(true)
@@ -23,8 +28,19 @@ function SupplierDebt() {
       setLoading(false)
     }
   }
-
-  useEffect(() => { fetchReceipts() }, [filter])
+    const fetchSuppliers = async () => {
+    try {
+      const res = await api.get('/api/suppliers')
+      if (res.data.success) setSuppliers(res.data.data)
+    } catch {
+      // silent
+    }
+  }
+  
+  useEffect(() => {
+    fetchReceipts()
+    fetchSuppliers()
+  }, [filter])
 
   const toggleExpand = async (receiptId) => {
     if (expandedId === receiptId) {
@@ -56,11 +72,22 @@ function SupplierDebt() {
   return (
     <div className="space-y-4">
 
-      <div>
-        <h1 className="text-xl font-bold text-gray-800">Supplier Debt</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {receipts.length} orders · ₦{totalOwed.toLocaleString()} owed
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">Supplier Debt</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {receipts.length} orders · ₦{totalOwed.toLocaleString()} owed
+          </p>
+        </div>
+        {isSuperAdmin && (
+          <button
+            onClick={() => setShowOpeningBalance(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition"
+          >
+            <Plus size={16} />
+            Add Opening Balance
+          </button>
+        )}
       </div>
 
       <div className="flex gap-2">
@@ -180,6 +207,16 @@ function SupplierDebt() {
             </tbody>
           </table>
         </div>
+      )}
+            {showOpeningBalance && (
+        <OpeningBalanceModal
+          suppliers={suppliers}
+          onClose={() => setShowOpeningBalance(false)}
+          onSaved={() => {
+            setShowOpeningBalance(false)
+            fetchReceipts()
+          }}
+        />
       )}
 
       {payingReceipt && (
@@ -312,6 +349,125 @@ function SupplierPaymentModal({ receipt, onClose, onSaved }) {
               {saving ? 'Recording...' : 'Record Payment'}
             </button>
           </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+function OpeningBalanceModal({ suppliers, onClose, onSaved }) {
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '')
+  const [totalCost, setTotalCost] = useState('')
+  const [amountPaidNow, setAmountPaidNow] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!supplierId) return toast.error('Select a supplier')
+    if (!totalCost || Number(totalCost) <= 0) return toast.error('Enter a valid total amount')
+    if (amountPaidNow && Number(amountPaidNow) > Number(totalCost)) {
+      return toast.error('Amount paid cannot exceed total owed')
+    }
+    setSaving(true)
+    try {
+      const payload = {
+        supplier_id: supplierId,
+        total_cost: Number(totalCost),
+      }
+      if (amountPaidNow) payload.amount_paid_now = Number(amountPaidNow)
+      if (notes) payload.notes = notes
+
+      const res = await api.post('/api/stock/restock/opening-balance', payload)
+      if (res.data.success) {
+        toast.success('Opening balance added!')
+        onSaved()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add opening balance')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-800">Add Opening Balance</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          For money already owed to a supplier from before this system was in use — no product line items needed.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Supplier *</label>
+            <select
+              value={supplierId}
+              onChange={(e) => setSupplierId(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            >
+              <option value="">Select supplier</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Total Amount Owed (₦) *</label>
+            <input
+              type="number"
+              value={totalCost}
+              onChange={(e) => setTotalCost(e.target.value)}
+              placeholder="e.g. 80000"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Already Paid (₦)</label>
+            <input
+              type="number"
+              value={amountPaidNow}
+              onChange={(e) => setAmountPaidNow(e.target.value)}
+              placeholder="Leave blank if nothing paid yet"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Notes (optional)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Balance carried over from before Jan 2026"
+              rows={2}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60"
+            >
+              {saving ? 'Adding...' : 'Add Opening Balance'}
+            </button>
+          </div>
+
         </form>
       </div>
     </div>

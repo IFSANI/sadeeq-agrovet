@@ -127,5 +127,50 @@ router.post('/:id/credit/repay', requireRole('super_admin', 'admin', 'cashier'),
     return error(res, 'Server error', 500)
   }
 })
+router.post('/:id/credit/adjust', requireRole('super_admin', 'admin'), async (req, res) => {
+  try {
+    const { id: customer_id } = req.params
+    const { amount, note, credit_limit } = req.body
+    if (!amount || amount <= 0) return error(res, 'A valid amount is required')
+
+    const { data: customer } = await supabase.from('customers').select('id').eq('id', customer_id).single()
+    if (!customer) return error(res, 'Customer not found', 404)
+
+    let { data: account } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
+
+    if (!account) {
+      if (credit_limit === undefined || credit_limit < 0) {
+        return error(res, 'credit_limit is required to open a new credit account for this customer')
+      }
+      const { data: newAccount, error: openErr } = await supabase
+        .from('credit_accounts')
+        .insert({ customer_id, credit_limit, opened_by: req.user.id })
+        .select().single()
+
+      if (openErr) return error(res, 'Could not open credit account', 500)
+      account = newAccount
+      await supabase.from('customers').update({ credit_limit, credit_status: 'active' }).eq('id', customer_id)
+    }
+
+    const newBalance = Number(account.current_balance) + Number(amount)
+
+    const { data: updated, error: dbError } = await supabase
+      .from('credit_accounts').update({ current_balance: newBalance }).eq('id', account.id).select().single()
+
+    if (dbError) return error(res, 'Could not adjust balance', 500)
+
+    await supabase.from('credit_transactions').insert({
+      credit_account_id: account.id, type: 'debit', amount, sale_id: null, balance_after: newBalance, note: note || null
+    })
+
+    await supabase.from('audit_logs').insert({
+      user_id: req.user.id, action: 'manual_debt_adjustment', entity_type: 'credit_account', entity_id: account.id, new_value: { amount, note: note || null, newBalance }
+    })
+
+    return success(res, updated, 'Manual debt entry recorded')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 
 export default router

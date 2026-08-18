@@ -206,6 +206,41 @@ router.get('/restock/:id', async (req, res) => {
     return error(res, 'Server error', 500)
   }
 })
+router.post('/restock/opening-balance', requireRole('super_admin'), async (req, res) => {
+  try {
+    const { supplier_id, total_cost, amount_paid_now, notes } = req.body
+    if (!supplier_id) return error(res, 'supplier_id is required')
+    if (!total_cost || total_cost <= 0) return error(res, 'A valid total_cost is required')
+
+    const { data: supplier } = await supabase.from('suppliers').select('id').eq('id', supplier_id).single()
+    if (!supplier) return error(res, 'Supplier not found', 404)
+
+    const amountPaid = amount_paid_now ? Number(amount_paid_now) : 0
+    const paymentStatus = amountPaid >= total_cost ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid')
+
+    const { data: receipt, error: receiptErr } = await supabase
+      .from('stock_receipts')
+      .insert({
+        branch_id: null, supplier_id, received_by: req.user.id, total_cost,
+        notes: notes || 'Opening balance (pre-system debt)', amount_paid: amountPaid, payment_status: paymentStatus
+      })
+      .select().single()
+
+    if (receiptErr) return error(res, 'Could not record opening balance', 500)
+
+    if (amountPaid > 0) {
+      await supabase.from('stock_receipt_payments').insert({
+        stock_receipt_id: receipt.id, amount: amountPaid, payment_method: 'cash', paid_by: req.user.id
+      })
+    }
+
+    await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'create_opening_balance', entity_type: 'stock_receipt', entity_id: receipt.id, new_value: receipt })
+
+    return success(res, receipt, 'Opening balance recorded')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 router.get('/transfer', async (req, res) => {
   try {
     const { status } = req.query

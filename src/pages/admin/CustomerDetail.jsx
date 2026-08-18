@@ -1,17 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Phone, Mail, MapPin, Wallet, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Phone, Mail, MapPin, Wallet, AlertCircle, PlusCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import useAuthStore from '../../store/authStore'
 
 function CustomerDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [customer, setCustomer] = useState(null)
   const [purchases, setPurchases] = useState([])
+  const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadingPurchases, setLoadingPurchases] = useState(true)
+  const [loadingTransactions, setLoadingTransactions] = useState(true)
   const [showRepay, setShowRepay] = useState(false)
+  const [showAdjust, setShowAdjust] = useState(false)
+  const { user } = useAuthStore()
+  const canAdjustDebt = user?.role === 'admin' || user?.role === 'super_admin'
 
   const fetchCustomer = async () => {
     setLoading(true)
@@ -37,9 +43,22 @@ function CustomerDetail() {
     }
   }
 
+  const fetchTransactions = async () => {
+    setLoadingTransactions(true)
+    try {
+      const res = await api.get(`/api/customers/${id}/credit/transactions`)
+      if (res.data.success) setTransactions(res.data.data)
+    } catch {
+      // silent
+    } finally {
+      setLoadingTransactions(false)
+    }
+  }
+
   useEffect(() => {
     fetchCustomer()
     fetchPurchases()
+    fetchTransactions()
   }, [id])
 
   if (loading) {
@@ -96,14 +115,25 @@ function CustomerDetail() {
 
       {/* Credit Account */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Wallet size={18} className="text-gray-500" />
-          <h2 className="font-semibold text-gray-700">Credit Account</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Wallet size={18} className="text-gray-500" />
+            <h2 className="font-semibold text-gray-700">Credit Account</h2>
+          </div>
+          {canAdjustDebt && (
+            <button
+              onClick={() => setShowAdjust(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700"
+            >
+              <PlusCircle size={14} />
+              Add Historical Debt
+            </button>
+          )}
         </div>
 
         {!account ? (
           <p className="text-gray-400 text-sm">
-            No credit account yet — one gets opened automatically the first time this customer uses Credit or Split payment at checkout.
+            No credit account yet — one gets opened automatically the first time this customer uses Credit or Split payment at checkout, or when historical debt is added.
           </p>
         ) : (
           <>
@@ -133,6 +163,52 @@ function CustomerDetail() {
               Record Repayment
             </button>
           </>
+        )}
+      </div>
+
+      {/* Transaction History */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-700">Credit Transaction History</h2>
+        </div>
+
+        {loadingTransactions ? (
+          <div className="flex items-center justify-center py-10">
+            <span className="w-6 h-6 border-4 border-green-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="text-center py-10">
+            <p className="text-gray-400 text-sm">No credit transactions yet</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {transactions.map((t) => (
+              <div key={t.id} className="px-5 py-3 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg ${
+                      t.type === 'debit' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+                    }`}>
+                      {t.type === 'debit' ? 'Debt Added' : 'Repayment'}
+                    </span>
+                    {!t.sale_id && (
+                      <span className="text-xs text-gray-400 italic">manual entry</span>
+                    )}
+                  </div>
+                  {t.note && <p className="text-xs text-gray-500 mt-1">{t.note}</p>}
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {new Date(t.created_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className={`text-sm font-bold ${t.type === 'debit' ? 'text-red-500' : 'text-green-600'}`}>
+                    {t.type === 'debit' ? '+' : '-'}₦{Number(t.amount).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-400">Balance: ₦{Number(t.balance_after).toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -193,10 +269,132 @@ function CustomerDetail() {
           onSaved={() => {
             setShowRepay(false)
             fetchCustomer()
+            fetchTransactions()
           }}
         />
       )}
 
+      {showAdjust && (
+        <AdjustDebtModal
+          customer={customer}
+          onClose={() => setShowAdjust(false)}
+          onSaved={() => {
+            setShowAdjust(false)
+            fetchCustomer()
+            fetchTransactions()
+          }}
+        />
+      )}
+
+    </div>
+  )
+}
+
+function AdjustDebtModal({ customer, onClose, onSaved }) {
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [creditLimit, setCreditLimit] = useState('')
+  const [saving, setSaving] = useState(false)
+  const hasAccount = !!customer.credit_account
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!amount || Number(amount) <= 0) {
+      toast.error('Enter a valid amount')
+      return
+    }
+    if (!hasAccount && (!creditLimit || Number(creditLimit) <= 0)) {
+      toast.error('Set a credit limit — this customer has no account yet')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = { amount: Number(amount) }
+      if (note) payload.note = note
+      if (!hasAccount) payload.credit_limit = Number(creditLimit)
+
+      const res = await api.post(`/api/customers/${customer.id}/credit/adjust`, payload)
+      if (res.data.success) {
+        toast.success('Historical debt added!')
+        onSaved()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add debt')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-800">Add Historical Debt</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          For debt owed from before this system was in use — not tied to any specific sale.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Amount Owed (₦) *</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="e.g. 15000"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          {!hasAccount && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Credit Limit (₦) — required, no account yet
+              </label>
+              <input
+                type="number"
+                value={creditLimit}
+                onChange={(e) => setCreditLimit(e.target.value)}
+                placeholder="e.g. 50000"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Note (optional)</label>
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Debt from before Jan 2026"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60"
+            >
+              {saving ? 'Adding...' : 'Add Debt'}
+            </button>
+          </div>
+
+        </form>
+      </div>
     </div>
   )
 }
