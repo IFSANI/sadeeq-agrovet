@@ -173,10 +173,34 @@ router.get('/profit-loss', async (req, res) => {
     const saleIds = sales.map(s => s.id)
 
     let cost_of_goods_sold = 0
+    let by_product = []
     if (saleIds.length > 0) {
-      const { data: saleItems } = await supabase.from('sale_items').select('product_id, quantity').in('sale_id', saleIds)
+      const { data: saleItems } = await supabase
+        .from('sale_items')
+        .select('product_id, quantity, subtotal, products(name)')
+        .in('sale_id', saleIds)
+
       const averages = await getAverageCosts(branch_id)
       cost_of_goods_sold = (saleItems || []).reduce((sum, item) => sum + (Number(item.quantity) * (averages[item.product_id] || 0)), 0)
+
+      const productTotals = {}
+      for (const item of saleItems || []) {
+        if (!productTotals[item.product_id]) {
+          productTotals[item.product_id] = { product_name: item.products?.name, quantity_sold: 0, revenue: 0, cogs: 0 }
+        }
+        productTotals[item.product_id].quantity_sold += Number(item.quantity)
+        productTotals[item.product_id].revenue += Number(item.subtotal)
+        productTotals[item.product_id].cogs += Number(item.quantity) * (averages[item.product_id] || 0)
+      }
+
+      by_product = Object.entries(productTotals).map(([product_id, t]) => ({
+        product_id,
+        product_name: t.product_name,
+        quantity_sold: t.quantity_sold,
+        revenue: Math.round(t.revenue * 100) / 100,
+        cogs: Math.round(t.cogs * 100) / 100,
+        gross_profit: Math.round((t.revenue - t.cogs) * 100) / 100
+      })).sort((a, b) => b.gross_profit - a.gross_profit)
     }
 
     let expenseQuery = supabase.from('expenses').select('amount')
@@ -195,8 +219,9 @@ router.get('/profit-loss', async (req, res) => {
       cost_of_goods_sold: Math.round(cost_of_goods_sold * 100) / 100,
       gross_profit: Math.round(gross_profit * 100) / 100,
       total_expenses,
-      net_profit: Math.round(net_profit * 100) / 100
-    }, 'P&L report generated (cost of goods sold is a weighted-average estimate using current cost data, not historical cost at time of sale)')
+      net_profit: Math.round(net_profit * 100) / 100,
+      by_product
+    }, 'P&L report generated (cost of goods sold is a weighted-average estimate; by_product shows gross_profit only — expenses cannot be allocated per-product)')
   } catch (err) {
     return error(res, 'Server error', 500)
   }

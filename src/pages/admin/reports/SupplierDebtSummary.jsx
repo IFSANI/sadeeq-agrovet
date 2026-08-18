@@ -55,8 +55,8 @@ function SupplierDebtSummary() {
                 <tbody>
                   {data.suppliers.map((s, i) => (
                     <tr key={i} className="border-b border-gray-50 last:border-0">
-                      <td className="px-4 py-3 text-gray-800">{s.supplier_name || s.name}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-red-500">₦{Number(s.total_outstanding || s.amount || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-gray-800">{s.supplier_name}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-red-500">₦{Number(s.outstanding || 0).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

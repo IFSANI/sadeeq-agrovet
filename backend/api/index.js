@@ -16,6 +16,7 @@ import settingsRoutes from '../routes/settings.js'
 import creditRoutes from '../routes/credit.js'
 import expenseRoutes from '../routes/expenses.js'
 import reportRoutes from '../routes/reports.js'
+import notificationRoutes from '../routes/notifications.js'
 
 const app = express()
 app.use(cors())
@@ -36,5 +37,6 @@ app.use('/api/chicks', chickRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/expenses', expenseRoutes)
 app.use('/api/reports', reportRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 export default app

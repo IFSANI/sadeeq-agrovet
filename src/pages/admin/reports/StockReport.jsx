@@ -91,15 +91,13 @@ function StockReport() {
                   <tr className="border-b border-gray-100 text-left text-gray-500">
                     <th className="px-4 py-3 font-medium">Product</th>
                     <th className="px-4 py-3 font-medium text-right">Quantity</th>
-                    <th className="px-4 py-3 font-medium text-right">Threshold</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.low_stock_items.map((item, i) => (
                     <tr key={i} className="border-b border-gray-50 last:border-0">
-                      <td className="px-4 py-3 text-gray-800">{item.product_name || item.name}</td>
+                      <td className="px-4 py-3 text-gray-800">{item.product_name}</td>
                       <td className="px-4 py-3 text-right text-red-500 font-semibold">{item.quantity}</td>
-                      <td className="px-4 py-3 text-right text-gray-500">{item.low_stock_threshold}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -116,15 +114,19 @@ function StockReport() {
                 <thead>
                   <tr className="border-b border-gray-100 text-left text-gray-500">
                     <th className="px-4 py-3 font-medium">Product</th>
+                    {isSuperAdmin && !selectedBranch && <th className="px-4 py-3 font-medium">Branch</th>}
                     <th className="px-4 py-3 font-medium text-right">Quantity</th>
+                    <th className="px-4 py-3 font-medium text-right">Avg. Cost</th>
                     <th className="px-4 py-3 font-medium text-right">Est. Value</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.items.map((item, i) => (
                     <tr key={i} className="border-b border-gray-50 last:border-0">
-                      <td className="px-4 py-3 text-gray-800">{item.product_name || item.name}</td>
+                      <td className="px-4 py-3 text-gray-800">{item.product_name}</td>
+                      {isSuperAdmin && !selectedBranch && <td className="px-4 py-3 text-gray-500">{item.branch}</td>}
                       <td className="px-4 py-3 text-right text-gray-600">{item.quantity}</td>
+                      <td className="px-4 py-3 text-right text-gray-500">₦{Number(item.average_cost || 0).toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800">₦{Number(item.estimated_value || 0).toLocaleString()}</td>
                     </tr>
                   ))}

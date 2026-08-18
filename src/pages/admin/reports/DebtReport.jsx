@@ -62,7 +62,7 @@ function DebtReport() {
                 <tbody>
                   {data.accounts.map((a, i) => (
                     <tr key={i} className="border-b border-gray-50 last:border-0">
-                      <td className="px-4 py-3 text-gray-800">{a.customer_name || a.customers?.name || a.name}</td>
+                      <td className="px-4 py-3 text-gray-800">{a.customers?.name}</td>
                       <td className="px-4 py-3 text-right font-semibold text-red-500">₦{Number(a.current_balance || 0).toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-gray-600">₦{Number(a.credit_limit || 0).toLocaleString()}</td>
                     </tr>

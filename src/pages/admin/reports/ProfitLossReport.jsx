@@ -15,6 +15,17 @@ function ProfitLossReport() {
   const { user } = useAuthStore()
   const isSuperAdmin = user?.role === 'super_admin'
 
+    const applyPreset = (preset) => {
+    const today = new Date()
+    const to = today.toISOString().split('T')[0]
+    let from = new Date()
+    if (preset === '7d') from.setDate(today.getDate() - 7)
+    if (preset === '30d') from.setDate(today.getDate() - 30)
+    if (preset === '1y') from.setFullYear(today.getFullYear() - 1)
+    setDateFrom(from.toISOString().split('T')[0])
+    setDateTo(to)
+  }
+
   const fetchBranches = async () => {
     try {
       const res = await api.get('/api/branches')
@@ -66,6 +77,27 @@ function ProfitLossReport() {
             {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
+                <div className="flex gap-2">
+          <button
+            onClick={() => applyPreset('7d')}
+            className="px-3 py-2 rounded-xl text-xs font-medium bg-gray-50 text-gray-600 hover:bg-gray-100 transition"
+          >
+            Last 7 Days
+          </button>
+          <button
+            onClick={() => applyPreset('30d')}
+            className="px-3 py-2 rounded-xl text-xs font-medium bg-gray-50 text-gray-600 hover:bg-gray-100 transition"
+          >
+            Last 30 Days
+          </button>
+          <button
+            onClick={() => applyPreset('1y')}
+            className="px-3 py-2 rounded-xl text-xs font-medium bg-gray-50 text-gray-600 hover:bg-gray-100 transition"
+          >
+            Last Year
+          </button>
+        </div>
+        
         <div className="flex items-center gap-2">
           <Calendar size={16} className="text-gray-400" />
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
