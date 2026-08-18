@@ -43,7 +43,7 @@ function Expenses() {
   }
 
   useEffect(() => {
-    if (isSuperAdmin) fetchBranches()
+    fetchBranches()
   }, [])
 
   useEffect(() => {
@@ -240,8 +240,8 @@ function ExpenseModal({ branches, isSuperAdmin, userBranchId, onClose, onSaved }
         category: form.category,
         description: form.description || null,
         amount: Number(form.amount),
+        branch_id: isSuperAdmin ? form.branch_id : userBranchId,
       }
-      if (isSuperAdmin) payload.branch_id = form.branch_id
 
       const res = await api.post('/api/expenses', payload)
       if (res.data.success) {
@@ -285,7 +285,7 @@ function ExpenseModal({ branches, isSuperAdmin, userBranchId, onClose, onSaved }
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">Branch</label>
               <input
-                value="Your branch"
+                value={branches.find((b) => b.id === userBranchId)?.name || 'Your branch'}
                 disabled
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500"
               />

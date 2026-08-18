@@ -20,6 +20,13 @@ import CreditDebt from './pages/admin/CreditDebt'
 import CustomerDetail from './pages/admin/CustomerDetail'
 import SupplierDebt from './pages/admin/SupplierDebt'
 import Expenses from './pages/admin/Expenses'
+import ReportsHub from './pages/admin/ReportsHub'
+import SalesReport from './pages/admin/reports/SalesReport'
+import StockReport from './pages/admin/reports/StockReport'
+import DebtReport from './pages/admin/reports/DebtReport'
+import ExpenseReport from './pages/admin/reports/ExpenseReport'
+import ProfitLossReport from './pages/admin/reports/ProfitLossReport'
+import SupplierDebtSummary from './pages/admin/reports/SupplierDebtSummary'
 
 function ComingSoon({ title }) {
   return (
@@ -117,8 +124,26 @@ function App() {
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Expenses /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/reports" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Reports" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><ReportsHub /></AdminPage></ProtectedRoute>
         } />
+        <Route path="/admin/reports/sales" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><SalesReport /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/reports/stock" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><StockReport /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/reports/debt" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><DebtReport /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/reports/expenses" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><ExpenseReport /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/reports/profit-loss" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><ProfitLossReport /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/reports/supplier-debt" element={
+          <ProtectedRoute allowed={['super_admin']}><AdminPage><SupplierDebtSummary /></AdminPage></ProtectedRoute>
+        } />      
         <Route path="/admin/settings" element={
           <ProtectedRoute allowed={['super_admin']}><AdminPage title="Settings" /></ProtectedRoute>
         } />
