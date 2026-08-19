@@ -176,7 +176,12 @@ function CustomerModal({ customer, onClose, onSaved }) {
     }
     setSaving(true)
     try {
-      const payload = { ...form, credit_limit: form.credit_limit ? Number(form.credit_limit) : 0 }
+      const payload = {
+        ...form,
+        email: form.email || null,
+        address: form.address || null,
+        credit_limit: form.credit_limit ? Number(form.credit_limit) : 0,
+      }
       const res = customer
         ? await api.put(`/api/customers/${customer.id}`, payload)
         : await api.post('/api/customers', payload)
@@ -185,8 +190,9 @@ function CustomerModal({ customer, onClose, onSaved }) {
         toast.success(customer ? 'Customer updated!' : 'Customer added!')
         onSaved()
       }
-    } catch {
-      toast.error('Failed to save customer')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save customer')
+      console.error('Customer save error:', err.response?.data)
     } finally {
       setSaving(false)
     }
