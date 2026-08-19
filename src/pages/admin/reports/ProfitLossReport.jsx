@@ -12,6 +12,7 @@ function ProfitLossReport() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selectedBranch, setSelectedBranch] = useState('')
+  const [sortBy, setSortBy] = useState('gross_profit')
   const { user } = useAuthStore()
   const isSuperAdmin = user?.role === 'super_admin'
 
@@ -54,6 +55,9 @@ function ProfitLossReport() {
   useEffect(() => { fetchReport() }, [dateFrom, dateTo, selectedBranch])
 
   const netPositive = Number(data?.net_profit || 0) >= 0
+  const sortedProducts = data?.by_product
+    ? [...data.by_product].sort((a, b) => Number(b[sortBy] || 0) - Number(a[sortBy] || 0))
+    : []
 
   return (
     <div className="space-y-4">
@@ -96,8 +100,16 @@ function ProfitLossReport() {
           >
             Last Year
           </button>
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(''); setDateTo('') }}
+              className="px-3 py-2 rounded-xl text-xs font-medium bg-red-50 text-red-500 hover:bg-red-100 transition"
+            >
+              Clear
+            </button>
+          )}
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Calendar size={16} className="text-gray-400" />
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
@@ -140,6 +152,48 @@ function ProfitLossReport() {
               </span>
             </div>
           </div>
+        </div>
+      )}
+
+      {data?.by_product?.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm font-semibold text-gray-700">By Product</p>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-400"
+            >
+              <option value="gross_profit">Sort by Profit</option>
+              <option value="revenue">Sort by Revenue</option>
+              <option value="quantity_sold">Sort by Quantity Sold</option>
+            </select>
+          </div>
+          <p className="px-5 pt-3 text-xs text-gray-400">
+            Profit here excludes shared expenses (rent, transport, etc.) — figures won't sum to match Net Profit above
+          </p>
+          <table className="w-full text-sm mt-2">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-gray-500">
+                <th className="px-4 py-3 font-medium">Product</th>
+                <th className="px-4 py-3 font-medium text-right">Qty Sold</th>
+                <th className="px-4 py-3 font-medium text-right">Revenue</th>
+                <th className="px-4 py-3 font-medium text-right">COGS</th>
+                <th className="px-4 py-3 font-medium text-right">Gross Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedProducts.map((p, i) => (
+                <tr key={i} className="border-b border-gray-50 last:border-0">
+                  <td className="px-4 py-3 text-gray-800">{p.product_name}</td>
+                  <td className="px-4 py-3 text-right text-gray-600">{p.quantity_sold}</td>
+                  <td className="px-4 py-3 text-right text-gray-600">₦{Number(p.revenue || 0).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-red-500">₦{Number(p.cogs || 0).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-green-600">₦{Number(p.gross_profit || 0).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

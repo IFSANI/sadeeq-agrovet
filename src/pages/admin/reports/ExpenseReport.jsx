@@ -91,8 +91,16 @@ function ExpenseReport() {
           >
             Last Year
           </button>
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(''); setDateTo('') }}
+              className="px-3 py-2 rounded-xl text-xs font-medium bg-red-50 text-red-500 hover:bg-red-100 transition"
+            >
+              Clear
+            </button>
+          )}
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Calendar size={16} className="text-gray-400" />
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
