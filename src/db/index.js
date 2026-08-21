@@ -13,4 +13,12 @@ db.version(1).stores({
   pending_sync: 'id, type, created_at'
 })
 
+// v2: adds local product+stock cache (needed for offline product search)
+// and a proper offline sales queue. Old tables untouched so nothing
+// that depends on them breaks.
+db.version(2).stores({
+  branch_product_cache: '[branch_id+product_id], branch_id, product_id, name, barcode',
+  pending_sales: 'offline_id, status, created_at',
+})
+
 export default db

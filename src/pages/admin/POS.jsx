@@ -7,6 +7,10 @@ import { getBranches } from '../../services/branchService'
 import Receipt from '../../components/pos/Receipt'
 import useAuthStore from '../../store/authStore'
 import api from '../../services/api'
+import { WifiOff, Clock } from 'lucide-react'
+import useOnlineStatus from '../../hooks/useOnlineStatus'
+import { refreshBranchCache, searchLocalProducts, queueOfflineSale } from '../../services/offlineSync'
+import PendingSalesPanel from '../../components/pos/PendingSalesPanel'
 
 function POS() {
   const [query, setQuery] = useState('')
@@ -21,6 +25,8 @@ function POS() {
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const searchRef = useRef(null)
   const { user, defaultBranchId } = useAuthStore()
+  const { online, pendingCount, refreshPendingCount } = useOnlineStatus()
+  const [showPendingSales, setShowPendingSales] = useState(false)
 
   const isSuperAdmin = user?.role === 'super_admin'
   const activeBranchId = isSuperAdmin ? selectedBranchId : user?.branch_id
@@ -43,6 +49,11 @@ function POS() {
       })
     }
   }, [])
+    useEffect(() => {
+    if (activeBranchId && online) {
+      refreshBranchCache(activeBranchId)
+    }
+  }, [activeBranchId, online])
 
   useEffect(() => {
     const timeout = setTimeout(async () => {
@@ -56,9 +67,12 @@ function POS() {
       }
       setSearching(true)
       try {
-        const res = await searchProducts(query, activeBranchId)
-        if (res.success) {
-          setSearchResults(res.data)
+        if (online) {
+          const res = await searchProducts(query, activeBranchId)
+          if (res.success) setSearchResults(res.data)
+        } else {
+          const results = await searchLocalProducts(query, activeBranchId)
+          setSearchResults(results)
         }
       } catch {
         toast.error('Search failed')
@@ -67,7 +81,7 @@ function POS() {
       }
     }, 300)
     return () => clearTimeout(timeout)
-  }, [query, activeBranchId])
+  }, [query, activeBranchId, online])
 
   const getItemPrice = (product) => {
     if (isWholesale && product.wholesale_price) {
@@ -103,6 +117,23 @@ function POS() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full">
+
+      {!online && (
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-40 bg-red-600 text-white text-xs font-semibold px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+          <WifiOff size={14} />
+          Offline — Cash/Transfer/POS sales will sync automatically once reconnected
+        </div>
+      )}
+
+      {pendingCount > 0 && (
+        <button
+          onClick={() => setShowPendingSales(true)}
+          className="fixed top-2 right-4 z-40 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-2 rounded-full shadow-lg flex items-center gap-2 transition"
+        >
+          <Clock size={14} />
+          {pendingCount} Pending Sync
+        </button>
+      )}
 
       {/* Left — Search & Results */}
       <div className="flex-1 space-y-4">
@@ -354,6 +385,7 @@ function POS() {
           customer={selectedCustomer}
           isWholesale={isWholesale}
           getItemPrice={getItemPrice}
+          online={online}
           onClose={() => setShowPayment(false)}
           onSuccess={(sale) => {
             setCartItems([])
@@ -362,6 +394,13 @@ function POS() {
             setIsWholesale(false)
             setReceipt(sale)
           }}
+        />
+      )}
+
+      {showPendingSales && (
+        <PendingSalesPanel
+          onClose={() => setShowPendingSales(false)}
+          onChange={refreshPendingCount}
         />
       )}
 
@@ -533,7 +572,7 @@ function CustomerPicker({ selectedCustomer, onSelect }) {
 }
 
 // Payment Modal
-function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWholesale, getItemPrice, onClose, onSuccess }) {
+function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWholesale, getItemPrice, online, onClose, onSuccess }) {
   const [method, setMethod] = useState(null)
   const [processing, setProcessing] = useState(false)
   const [creditAccount, setCreditAccount] = useState(customer?.credit_account || null)
@@ -543,7 +582,8 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
   const [amountPaidNow, setAmountPaidNow] = useState('')
   const [methodNow, setMethodNow] = useState('cash')
 
-  const methods = ['Cash', 'Transfer', 'POS', 'Credit', 'Split']
+  const allMethods = ['Cash', 'Transfer', 'POS', 'Credit', 'Split']
+  const methods = online ? allMethods : ['Cash', 'Transfer', 'POS']
   const needsCustomer = method === 'Credit' || method === 'Split'
   const remainingOnCredit = method === 'Split' ? Math.max(total - Number(amountPaidNow || 0), 0) : total
 
@@ -629,6 +669,27 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         salePayload.payment_method_now = methodNow
       }
 
+      if (!online) {
+        const upfrontMethod = method.toLowerCase()
+        await queueOfflineSale({
+          salePayload,
+          upfrontAmount: total,
+          upfrontMethod,
+        })
+        toast.success('Sale saved offline — will sync automatically once reconnected')
+        onSuccess({
+          ...salePayload,
+          id: 'PENDING',
+          created_at: new Date().toISOString(),
+          payment_status: 'pending_sync',
+          sale_items: salePayload.items.map((i) => ({
+            ...i,
+            products: { name: cartItems.find((c) => c.id === i.product_id)?.name },
+          })),
+        })
+        return
+      }
+
       const saleRes = await createSale(salePayload)
       if (!saleRes.success) {
         toast.error(saleRes.message || 'Failed to create sale')
@@ -679,6 +740,12 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
           <p className="text-sm text-gray-500 mb-1">Amount Due</p>
           <p className="text-3xl font-bold text-green-600">₦{total.toLocaleString()}</p>
         </div>
+
+        {!online && (
+          <div className="mb-4 bg-yellow-50 rounded-xl p-3 text-xs text-yellow-700">
+            You're offline — Credit and Split are disabled since they need a live balance check. This sale will save locally and sync automatically once you're back online.
+          </div>
+        )}
 
         <p className="text-sm font-medium text-gray-600 mb-3">Select Payment Method</p>
         <div className="grid grid-cols-2 gap-2 mb-4">
