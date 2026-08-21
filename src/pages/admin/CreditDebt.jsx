@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react'
 import { Search, Wallet, User, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import useOnlineStatus from '../../hooks/useOnlineStatus'
+import { queueRepayment } from '../../services/offlineSync'
 
 function CreditDebt() {
   const [customers, setCustomers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [repayingCustomer, setRepayingCustomer] = useState(null)
+  const { online } = useOnlineStatus()
 
   const fetchCustomers = async () => {
     setLoading(true)
@@ -136,6 +139,7 @@ function CreditDebt() {
       {repayingCustomer && (
         <RepaymentModal
           customer={repayingCustomer}
+          online={online}
           onClose={() => setRepayingCustomer(null)}
           onSaved={() => {
             setRepayingCustomer(null)
@@ -148,7 +152,7 @@ function CreditDebt() {
   )
 }
 
-function RepaymentModal({ customer, onClose, onSaved }) {
+function RepaymentModal({ customer, online, onClose, onSaved }) {
   const [amount, setAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [reference, setReference] = useState('')
@@ -169,11 +173,15 @@ function RepaymentModal({ customer, onClose, onSaved }) {
     }
     setSaving(true)
     try {
-      const payload = {
-        amount: Number(amount),
-        payment_method: paymentMethod,
-      }
+      const payload = { amount: Number(amount), payment_method: paymentMethod }
       if (reference) payload.reference = reference
+
+      if (!online) {
+        await queueRepayment(customer.id, payload)
+        toast.success('Repayment saved offline — will sync once reconnected')
+        onSaved()
+        return
+      }
 
       const res = await api.post(`/api/customers/${customer.id}/credit/repay`, payload)
       if (res.data.success) {

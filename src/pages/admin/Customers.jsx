@@ -3,6 +3,9 @@ import { Plus, Edit2, Search, User, Phone, Mail, MapPin, Wallet } from 'lucide-r
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import api from '../../services/api'
+import useOnlineStatus from '../../hooks/useOnlineStatus'
+import { refreshCustomerCache, searchLocalCustomers as searchCachedCustomers, queueCustomerEdit } from '../../services/offlineSync'
+import db from '../../db'
 
 function Customers() {
   const [customers, setCustomers] = useState([])
@@ -10,12 +13,21 @@ function Customers() {
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
+  const { online } = useOnlineStatus()
 
   const fetchCustomers = async () => {
     setLoading(true)
     try {
+      if (!online) {
+        const cached = await db.customer_cache.toArray()
+        setCustomers(cached)
+        return
+      }
       const res = await api.get('/api/customers')
-      if (res.data.success) setCustomers(res.data.data)
+      if (res.data.success) {
+        setCustomers(res.data.data)
+        refreshCustomerCache()
+      }
     } catch {
       toast.error('Failed to load customers')
     } finally {
@@ -45,7 +57,14 @@ function Customers() {
           </p>
         </div>
         <button
-          onClick={() => { setEditing(null); setShowModal(true) }}
+          onClick={() => {
+            if (!online) {
+              toast.error('Adding a new customer needs an internet connection')
+              return
+            }
+            setEditing(null)
+            setShowModal(true)
+          }}
           className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition"
         >
           <Plus size={16} />
@@ -142,6 +161,7 @@ function Customers() {
       {showModal && (
         <CustomerModal
           customer={editing}
+          online={online}
           onClose={() => setShowModal(false)}
           onSaved={() => {
             setShowModal(false)
@@ -154,7 +174,7 @@ function Customers() {
   )
 }
 
-function CustomerModal({ customer, onClose, onSaved }) {
+function CustomerModal({ customer, online, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: customer?.name || '',
     phone: customer?.phone || '',
@@ -182,6 +202,14 @@ function CustomerModal({ customer, onClose, onSaved }) {
         address: form.address || null,
         credit_limit: form.credit_limit ? Number(form.credit_limit) : 0,
       }
+
+      if (!online && customer) {
+        await queueCustomerEdit(customer.id, payload)
+        toast.success('Saved offline — will sync once reconnected')
+        onSaved()
+        return
+      }
+
       const res = customer
         ? await api.put(`/api/customers/${customer.id}`, payload)
         : await api.post('/api/customers', payload)

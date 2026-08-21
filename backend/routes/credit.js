@@ -98,9 +98,17 @@ router.get('/:id/credit/transactions', requireRole('super_admin', 'admin', 'cash
 router.post('/:id/credit/repay', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
-    const { amount, payment_method, reference } = req.body
+    const { amount, payment_method, reference, offline_id } = req.body
     if (!amount || amount <= 0) return error(res, 'A valid amount is required')
     if (!payment_method) return error(res, 'payment_method is required')
+
+    if (offline_id) {
+      const { data: existingPayment } = await supabase.from('payments').select('*').eq('offline_id', offline_id).maybeSingle()
+      if (existingPayment) {
+        const { data: account } = await supabase.from('credit_accounts').select('current_balance').eq('customer_id', customer_id).maybeSingle()
+        return success(res, { payment: existingPayment, new_balance: account?.current_balance }, 'Repayment already recorded')
+      }
+    }
 
     const { data: account } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
     if (!account) return error(res, 'This customer has no credit account')
@@ -110,10 +118,13 @@ router.post('/:id/credit/repay', requireRole('super_admin', 'admin', 'cashier'),
 
     const { data: payment, error: payErr } = await supabase
       .from('payments')
-      .insert({ credit_account_id: account.id, amount, payment_method, reference: reference || null, confirmed_by: req.user.id })
+      .insert({ credit_account_id: account.id, amount, payment_method, reference: reference || null, confirmed_by: req.user.id, offline_id: offline_id || null })
       .select().single()
 
-    if (payErr) return error(res, 'Could not record payment', 500)
+    if (payErr) {
+      if (payErr.code === '23505') return error(res, 'This repayment was already recorded (duplicate offline_id)')
+      return error(res, 'Could not record payment', 500)
+    }
 
     await supabase.from('credit_accounts').update({ current_balance: newBalance }).eq('id', account.id)
     await supabase.from('credit_transactions').insert({

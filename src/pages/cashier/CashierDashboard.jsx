@@ -2,44 +2,67 @@ import { useState, useEffect } from 'react'
 import { TrendingUp, AlertTriangle, Receipt } from 'lucide-react'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
+import useOnlineStatus from '../../hooks/useOnlineStatus'
+import { refreshDashboardCache, getDashboardCache } from '../../services/offlineSync'
 
 function CashierDashboard() {
   const [todaySales, setTodaySales] = useState({ count: 0, total: 0 })
   const [lowStock, setLowStock] = useState([])
   const [loading, setLoading] = useState(true)
   const { user } = useAuthStore()
+  const { online } = useOnlineStatus()
+  const [cachedAt, setCachedAt] = useState(null)
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!online) {
+        const cached = await getDashboardCache(user?.branch_id)
+        if (cached) {
+          setTodaySales({ count: cached.salesCount, total: cached.salesTotal })
+          setLowStock(cached.lowStock || [])
+          setCachedAt(cached.updated_at)
+        }
+        setLoading(false)
+        return
+      }
+
       try {
         const [salesRes, stockRes] = await Promise.allSettled([
           api.get('/api/sales/today'),
           api.get('/api/stock/low-stock'),
         ])
 
+        let salesCount = 0, salesTotal = 0, lowStockData = []
+
         if (salesRes.status === 'fulfilled' && salesRes.value.data.success) {
           const sales = salesRes.value.data.data
-          setTodaySales({
-            count: sales.length,
-            total: sales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0),
-          })
+          salesCount = sales.length
+          salesTotal = sales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0)
+          setTodaySales({ count: salesCount, total: salesTotal })
         }
 
         if (stockRes.status === 'fulfilled' && stockRes.value.data.success) {
-          setLowStock(stockRes.value.data.data)
+          lowStockData = stockRes.value.data.data
+          setLowStock(lowStockData)
         }
+
+        await refreshDashboardCache(user?.branch_id, { salesCount, salesTotal, lowStock: lowStockData })
       } finally {
         setLoading(false)
       }
     }
     fetchData()
-  }, [])
+  }, [online])
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-gray-800">Welcome, {user?.name?.split(' ')[0]}</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Here's what's happening at your branch today</p>
+        <p className="text-sm text-gray-500 mt-0.5">
+          {!online && cachedAt
+            ? `Offline — showing data as of ${new Date(cachedAt).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}`
+            : "Here's what's happening at your branch today"}
+        </p>
       </div>
 
       {loading ? (

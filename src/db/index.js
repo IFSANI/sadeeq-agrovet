@@ -13,12 +13,26 @@ db.version(1).stores({
   pending_sync: 'id, type, created_at'
 })
 
-// v2: adds local product+stock cache (needed for offline product search)
-// and a proper offline sales queue. Old tables untouched so nothing
-// that depends on them breaks.
 db.version(2).stores({
   branch_product_cache: '[branch_id+product_id], branch_id, product_id, name, barcode',
   pending_sales: 'offline_id, status, created_at',
+})
+
+db.version(3).stores({
+  customer_cache: 'id, name, phone',
+})
+
+// v4: caches + queues for everything else made offline-capable —
+// today's sales view, customer edits, dashboard summary, loose cart
+// items/close, and credit repayments.
+db.version(4).stores({
+  sales_cache: 'id, branch_id, created_at',
+  pending_customer_edits: 'offline_id, customer_id, status, created_at',
+  dashboard_cache: 'branch_id, updated_at',
+  cart_cache: 'branch_id, updated_at',
+  pending_cart_items: 'offline_id, cart_id, status, created_at',
+  pending_cart_close: 'offline_id, cart_id, status, created_at',
+  pending_repayments: 'offline_id, customer_id, status, created_at',
 })
 
 export default db

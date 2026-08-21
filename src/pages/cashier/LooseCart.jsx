@@ -3,6 +3,8 @@ import { Plus, Package, X, ShoppingBag, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
+import useOnlineStatus from '../../hooks/useOnlineStatus'
+import { cacheOpenCart, getCachedCart, queueCartItem, queueCartClose, searchLocalProducts } from '../../services/offlineSync'
 
 function LooseCart() {
   const [cart, setCart] = useState(null)
@@ -11,12 +13,21 @@ function LooseCart() {
   const [showClose, setShowClose] = useState(false)
   const { user, defaultBranchId } = useAuthStore()
   const branchId = user?.branch_id || defaultBranchId
+  const { online } = useOnlineStatus()
 
   const fetchOpenCart = async () => {
     setLoading(true)
     try {
+      if (!online) {
+        const cached = await getCachedCart(branchId)
+        setCart(cached)
+        return
+      }
       const res = await api.get('/api/carts/open', { params: { branch_id: branchId } })
-      if (res.data.success) setCart(res.data.data)
+      if (res.data.success) {
+        setCart(res.data.data)
+        if (res.data.data) await cacheOpenCart(branchId, res.data.data)
+      }
     } catch {
       setCart(null)
     } finally {
@@ -24,7 +35,7 @@ function LooseCart() {
     }
   }
 
-  useEffect(() => { fetchOpenCart() }, [])
+  useEffect(() => { fetchOpenCart() }, [online])
 
   const openNewCart = async () => {
   try {
@@ -56,12 +67,18 @@ function LooseCart() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
           <ShoppingBag size={48} className="text-gray-200 mx-auto mb-3" />
           <p className="text-gray-400 font-medium mb-4">No open cart</p>
-          <button
-            onClick={openNewCart}
-            className="bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
-          >
-            Open New Cart
-          </button>
+          {online ? (
+            <button
+              onClick={openNewCart}
+              className="bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
+            >
+              Open New Cart
+            </button>
+          ) : (
+            <p className="text-xs text-gray-400">
+              Opening a new cart needs an internet connection — reconnect first
+            </p>
+          )}
         </div>
       ) : (
         <>
@@ -125,6 +142,8 @@ function LooseCart() {
       {showAddItem && cart && (
         <AddItemModal
           cartId={cart.id}
+          online={online}
+          branchId={branchId}
           onClose={() => setShowAddItem(false)}
           onAdded={() => {
             setShowAddItem(false)
@@ -136,6 +155,7 @@ function LooseCart() {
       {showClose && cart && (
         <CloseCartModal
           cart={cart}
+          online={online}
           onClose={() => setShowClose(false)}
           onClosed={() => {
             setShowClose(false)
@@ -148,7 +168,7 @@ function LooseCart() {
   )
 }
 
-function AddItemModal({ cartId, onClose, onAdded }) {
+function AddItemModal({ cartId, online, branchId, onClose, onAdded }) {
   const [search, setSearch] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
@@ -162,14 +182,19 @@ function AddItemModal({ cartId, onClose, onAdded }) {
     if (search.length < 2) { setResults([]); return }
     const timer = setTimeout(async () => {
       try {
-        const res = await api.get('/api/products/search', { params: { q: search, branch_id: branchId } })
-        if (res.data.success) setResults(res.data.data)
+        if (online) {
+          const res = await api.get('/api/products/search', { params: { q: search, branch_id: branchId } })
+          if (res.data.success) setResults(res.data.data)
+        } else {
+          const results = await searchLocalProducts(search, branchId)
+          setResults(results)
+        }
       } catch {
         // silent
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [search, branchId])
+  }, [search, branchId, online])
 
   const pickProduct = (product) => {
     setSelected(product)
@@ -186,11 +211,20 @@ function AddItemModal({ cartId, onClose, onAdded }) {
     }
     setSaving(true)
     try {
-      const res = await api.post(`/api/carts/${cartId}/items`, {
+      const itemPayload = {
         product_id: selected.id,
         initial_quantity: Number(quantity),
         unit_price: Number(unitPrice),
-      })
+      }
+
+      if (!online) {
+        await queueCartItem(cartId, itemPayload)
+        toast.success('Item queued — will sync once reconnected')
+        onAdded()
+        return
+      }
+
+      const res = await api.post(`/api/carts/${cartId}/items`, itemPayload)
       if (res.data.success) {
         toast.success('Item added to cart!')
         onAdded()
@@ -284,7 +318,7 @@ function AddItemModal({ cartId, onClose, onAdded }) {
   )
 }
 
-function CloseCartModal({ cart, onClose, onClosed }) {
+function CloseCartModal({ cart, online, onClose, onClosed }) {
   const [remaining, setRemaining] = useState(
     Object.fromEntries((cart.cart_items || []).map((item) => [item.id, '']))
   )
@@ -316,6 +350,11 @@ function CloseCartModal({ cart, onClose, onClosed }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
+    if (!online && (paymentMethod === 'credit')) {
+      toast.error('Credit closes need a live connection — pick cash, transfer or pos instead')
+      return
+    }
+
     if (paymentMethod === 'credit' && !selectedCustomer) {
       toast.error('Select a customer for credit sales')
       return
@@ -340,6 +379,13 @@ function CloseCartModal({ cart, onClose, onClosed }) {
       }
       if (paymentMethod === 'credit') {
         payload.customer_id = selectedCustomer.id
+      }
+
+      if (!online) {
+        await queueCartClose(cart.id, payload)
+        toast.success('Cart close saved offline — will sync once reconnected')
+        onClosed()
+        return
       }
 
       const res = await api.put(`/api/carts/${cart.id}/close`, payload)
@@ -390,20 +436,25 @@ function CloseCartModal({ cart, onClose, onClosed }) {
           <div className="border-t border-gray-100 pt-4">
             <label className="block text-sm font-medium text-gray-600 mb-2">Payment Method</label>
             <div className="grid grid-cols-4 gap-2">
-              {methods.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setPaymentMethod(m)}
-                  className={`py-2 rounded-xl border-2 text-xs font-semibold capitalize transition ${
-                    paymentMethod === m
-                      ? 'bg-green-50 border-green-400 text-green-700'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
+              {methods.map((m) => {
+                const disabled = !online && m === 'credit'
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setPaymentMethod(m)}
+                    className={`py-2 rounded-xl border-2 text-xs font-semibold capitalize transition ${
+                      disabled ? 'opacity-40 cursor-not-allowed border-gray-100 text-gray-300' :
+                      paymentMethod === m
+                        ? 'bg-green-50 border-green-400 text-green-700'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                )
+              })}
             </div>
           </div>
 

@@ -4,6 +4,8 @@ import toast from 'react-hot-toast'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
 import Receipt from '../../components/pos/Receipt'
+import useOnlineStatus from '../../hooks/useOnlineStatus'
+import { refreshTodaySalesCache, getTodaySalesOffline } from '../../services/offlineSync'
 
 function SalesHistory() {
   const [sales, setSales] = useState([])
@@ -17,6 +19,7 @@ function SalesHistory() {
   const [printSale, setPrintSale] = useState(null)
   const { user, defaultBranchId } = useAuthStore()
   const isSuperAdmin = user?.role === 'super_admin'
+  const { online } = useOnlineStatus()
 
   const fetchBranches = async () => {
     try {
@@ -30,14 +33,24 @@ function SalesHistory() {
   const fetchSales = async () => {
     setLoading(true)
     try {
-      const params = {}
       const branchToUse = isSuperAdmin ? selectedBranch : (user?.branch_id || defaultBranchId)
+
+      if (!online) {
+        const cached = await getTodaySalesOffline(branchToUse)
+        setSales(cached)
+        return
+      }
+
+      const params = {}
       if (branchToUse) params.branch_id = branchToUse
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
 
       const res = await api.get('/api/sales', { params })
-      if (res.data.success) setSales(res.data.data)
+      if (res.data.success) {
+        setSales(res.data.data)
+        refreshTodaySalesCache(branchToUse)
+      }
     } catch {
       toast.error('Failed to load sales history')
     } finally {
@@ -52,7 +65,7 @@ function SalesHistory() {
   useEffect(() => {
     fetchSales()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBranch, dateFrom, dateTo])
+  }, [selectedBranch, dateFrom, dateTo, online])
 
   const viewReceipt = async (saleId) => {
     try {
@@ -85,6 +98,11 @@ function SalesHistory() {
     <div className="space-y-4">
 
       {/* Header */}
+      {!online && (
+        <div className="bg-yellow-50 text-yellow-700 text-xs font-medium px-4 py-2 rounded-xl">
+          Offline — showing today's sales only, including any of this device's unsynced sales
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Sales History</h1>
@@ -181,8 +199,10 @@ function SalesHistory() {
                   )}
                   <td className="px-4 py-3 text-gray-600 capitalize">{sale.payment_method}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2.5 py-1 rounded-lg text-xs font-medium capitalize ${statusColor(sale.payment_status)}`}>
-                      {sale.payment_status}
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-medium capitalize ${
+                      sale.payment_status === 'pending_sync' ? 'bg-orange-50 text-orange-600' : statusColor(sale.payment_status)
+                    }`}>
+                      {sale.payment_status === 'pending_sync' ? 'Pending Sync' : sale.payment_status}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-800">

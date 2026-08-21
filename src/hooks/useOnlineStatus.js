@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react'
-import { syncPendingSales, getPendingCount } from '../services/offlineSync'
+import {
+  syncPendingSales, getPendingCount,
+  syncPendingCustomerEdits, getPendingCustomerEditsCount,
+  syncPendingCartActions, getPendingCartActionsCount,
+  syncPendingRepayments, getPendingRepaymentsCount,
+} from '../services/offlineSync'
 import toast from 'react-hot-toast'
 
 export default function useOnlineStatus() {
@@ -7,8 +12,13 @@ export default function useOnlineStatus() {
   const [pendingCount, setPendingCount] = useState(0)
 
   const refreshPendingCount = async () => {
-    const count = await getPendingCount()
-    setPendingCount(count)
+    const [sales, edits, cart, repay] = await Promise.all([
+      getPendingCount(),
+      getPendingCustomerEditsCount(),
+      getPendingCartActionsCount(),
+      getPendingRepaymentsCount(),
+    ])
+    setPendingCount(sales + edits + cart + repay)
   }
 
   useEffect(() => {
@@ -16,13 +26,28 @@ export default function useOnlineStatus() {
 
     const handleOnline = async () => {
       setOnline(true)
-      const count = await getPendingCount()
-      if (count > 0) {
-        toast.loading(`Back online — syncing ${count} pending sale${count > 1 ? 's' : ''}...`, { id: 'sync' })
-        const result = await syncPendingSales()
+      await refreshPendingCount()
+      const total = await (async () => {
+        const [sales, edits, cart, repay] = await Promise.all([
+          getPendingCount(), getPendingCustomerEditsCount(),
+          getPendingCartActionsCount(), getPendingRepaymentsCount(),
+        ])
+        return sales + edits + cart + repay
+      })()
+
+      if (total > 0) {
+        toast.loading(`Back online — syncing ${total} pending item${total > 1 ? 's' : ''}...`, { id: 'sync' })
+        const [salesResult, editsResult, cartResult, repayResult] = await Promise.all([
+          syncPendingSales(),
+          syncPendingCustomerEdits(),
+          syncPendingCartActions(),
+          syncPendingRepayments(),
+        ])
         toast.dismiss('sync')
-        if (result.synced > 0) toast.success(`Synced ${result.synced} sale${result.synced > 1 ? 's' : ''}`)
-        if (result.failed > 0) toast.error(`${result.failed} sale${result.failed > 1 ? 's' : ''} need attention`)
+        const totalSynced = salesResult.synced + editsResult.synced + cartResult.synced + repayResult.synced
+        const totalFailed = salesResult.failed + editsResult.failed + cartResult.failed + repayResult.failed
+        if (totalSynced > 0) toast.success(`Synced ${totalSynced} item${totalSynced > 1 ? 's' : ''}`)
+        if (totalFailed > 0) toast.error(`${totalFailed} item${totalFailed > 1 ? 's' : ''} need attention`)
         await refreshPendingCount()
       }
     }

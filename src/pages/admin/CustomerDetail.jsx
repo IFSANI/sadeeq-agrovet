@@ -4,6 +4,8 @@ import { ArrowLeft, Phone, Mail, MapPin, Wallet, AlertCircle, PlusCircle } from 
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
+import useOnlineStatus from '../../hooks/useOnlineStatus'
+import { queueRepayment } from '../../services/offlineSync'
 
 function CustomerDetail() {
   const { id } = useParams()
@@ -18,6 +20,7 @@ function CustomerDetail() {
   const [showAdjust, setShowAdjust] = useState(false)
   const { user } = useAuthStore()
   const canAdjustDebt = user?.role === 'admin' || user?.role === 'super_admin'
+  const { online } = useOnlineStatus()
 
   const fetchCustomer = async () => {
     setLoading(true)
@@ -265,6 +268,7 @@ function CustomerDetail() {
       {showRepay && (
         <RepaymentModal
           customer={customer}
+          online={online}
           onClose={() => setShowRepay(false)}
           onSaved={() => {
             setShowRepay(false)
@@ -399,7 +403,7 @@ function AdjustDebtModal({ customer, onClose, onSaved }) {
   )
 }
 
-function RepaymentModal({ customer, onClose, onSaved }) {
+function RepaymentModal({ customer, online, onClose, onSaved }) {
   const [amount, setAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [reference, setReference] = useState('')
@@ -422,6 +426,13 @@ function RepaymentModal({ customer, onClose, onSaved }) {
     try {
       const payload = { amount: Number(amount), payment_method: paymentMethod }
       if (reference) payload.reference = reference
+
+      if (!online) {
+        await queueRepayment(customer.id, payload)
+        toast.success('Repayment saved offline — will sync once reconnected')
+        onSaved()
+        return
+      }
 
       const res = await api.post(`/api/customers/${customer.id}/credit/repay`, payload)
       if (res.data.success) {

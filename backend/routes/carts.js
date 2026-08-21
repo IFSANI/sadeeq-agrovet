@@ -83,10 +83,15 @@ router.get('/:id', async (req, res) => {
 router.post('/:id/items', async (req, res) => {
   try {
     const { id: cart_id } = req.params
-    const { product_id, initial_quantity, unit_price } = req.body
+    const { product_id, initial_quantity, unit_price, offline_id } = req.body
 
     if (!product_id || !initial_quantity || unit_price === undefined) {
       return error(res, 'product_id, initial_quantity and unit_price are required')
+    }
+
+    if (offline_id) {
+      const { data: existingItem } = await supabase.from('cart_items').select('*').eq('offline_id', offline_id).maybeSingle()
+      if (existingItem) return success(res, existingItem, 'Item already added to cart')
     }
 
     const { data: cart } = await supabase.from('loose_sale_carts').select('*').eq('id', cart_id).single()
@@ -100,10 +105,13 @@ router.post('/:id/items', async (req, res) => {
 
     const { data: item, error: itemErr } = await supabase
       .from('cart_items')
-      .insert({ cart_id, product_id, initial_quantity, remaining_quantity: initial_quantity, unit_price })
+      .insert({ cart_id, product_id, initial_quantity, remaining_quantity: initial_quantity, unit_price, offline_id: offline_id || null })
       .select().single()
 
-    if (itemErr) return error(res, 'Could not add item to cart', 500)
+    if (itemErr) {
+      if (itemErr.code === '23505') return error(res, 'This item was already added (duplicate offline_id)')
+      return error(res, 'Could not add item to cart', 500)
+    }
 
     await supabase.from('stock').update({ quantity: Number(stockRow.quantity) - Number(initial_quantity), updated_at: new Date() }).eq('id', stockRow.id)
 
@@ -169,7 +177,13 @@ router.put('/:id/close', async (req, res) => {
 
     const { data: cart } = await supabase.from('loose_sale_carts').select('*, cart_items(*)').eq('id', cart_id).single()
     if (!cart) return error(res, 'Cart not found', 404)
-    if (cart.status !== 'open') return error(res, 'Cart is already closed')
+    if (cart.status !== 'open') {
+      if (cart.sale_id) {
+        const { data: existingSale } = await supabase.from('sales').select('*').eq('id', cart.sale_id).single()
+        return success(res, { cart, sale: existingSale }, 'Cart was already closed')
+      }
+      return error(res, 'Cart is already closed')
+    }
     if (cart.cart_items.length === 0) return error(res, 'Cannot close an empty cart')
 
     if (Array.isArray(items) && items.length > 0) {
@@ -253,7 +267,7 @@ router.put('/:id/close', async (req, res) => {
     }
 
     const { data: updatedCart, error: cartErr } = await supabase
-      .from('loose_sale_carts').update({ status: 'closed', closed_at: new Date() }).eq('id', cart_id).select().single()
+      .from('loose_sale_carts').update({ status: 'closed', closed_at: new Date(), sale_id: sale.id }).eq('id', cart_id).select().single()
 
     if (cartErr) return error(res, 'Could not close cart', 500)
 
