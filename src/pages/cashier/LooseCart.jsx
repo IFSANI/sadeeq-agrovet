@@ -143,7 +143,6 @@ function LooseCart() {
         <AddItemModal
           cartId={cart.id}
           online={online}
-          branchId={branchId}
           onClose={() => setShowAddItem(false)}
           onAdded={() => {
             setShowAddItem(false)
@@ -168,7 +167,7 @@ function LooseCart() {
   )
 }
 
-function AddItemModal({ cartId, online, branchId, onClose, onAdded }) {
+function AddItemModal({ cartId, online, onClose, onAdded }) {
   const [search, setSearch] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)

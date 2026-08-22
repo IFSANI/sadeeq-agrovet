@@ -57,6 +57,31 @@ export async function searchLocalProducts(query, branchId) {
       stock: { quantity: p.quantity, low_stock_threshold: p.low_stock_threshold },
     }))
 }
+export async function refreshCustomerCache() {
+  if (!isOnline()) return
+  try {
+    const res = await api.get('/api/customers')
+    if (!res.data.success) return
+    const rows = res.data.data.map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      email: c.email || null,
+      credit_account: c.credit_account || null,
+    }))
+    await db.customer_cache.clear()
+    await db.customer_cache.bulkPut(rows)
+  } catch {
+    // silent — caching is best-effort, doesn't block anything
+  }
+}
+
+export async function searchLocalCustomers(query) {
+  if (!query) return []
+  const q = query.toLowerCase()
+  const all = await db.customer_cache.toArray()
+  return all.filter((c) => c.name?.toLowerCase().includes(q) || c.phone?.includes(query))
+}
 
 // Queues a sale for later sync. Stores the exact payload we would have
 // sent to the API, plus what's needed to confirm payment afterward.

@@ -50,9 +50,17 @@ function POS() {
     }
   }, [])
     useEffect(() => {
-    if (activeBranchId && online) {
+    if (!activeBranchId || !online) return
+
+    refreshBranchCache(activeBranchId)
+
+    // Keep the offline cache fresh even if the cashier stays on this
+    // screen for hours without navigating away or losing connection.
+    const interval = setInterval(() => {
       refreshBranchCache(activeBranchId)
-    }
+    }, 60000) // every 60 seconds
+
+    return () => clearInterval(interval)
   }, [activeBranchId, online])
 
   useEffect(() => {
