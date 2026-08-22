@@ -144,6 +144,7 @@ function LooseCart() {
           cartId={cart.id}
           online={online}
           onClose={() => setShowAddItem(false)}
+          
           onAdded={() => {
             setShowAddItem(false)
             fetchOpenCart()
