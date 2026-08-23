@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    let { branch_id, customer_id, payment_method, items, offline_id, amount_paid_now, payment_method_now } = req.body
+    let { branch_id, customer_id, payment_method, items, offline_id, amount_paid_now, payment_method_now, deposit_amount_used } = req.body
 
     if (!branch_id) return error(res, 'branch_id is required')
     if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
@@ -68,12 +68,22 @@ router.post('/', async (req, res) => {
         return error(res, 'Each item needs product_id, quantity and unit_price')
       }
     }
-    if (['credit', 'split'].includes(payment_method) && !customer_id) {
-      return error(res, 'customer_id is required for credit and split sales')
+
+    const total_amount = items.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.unit_price)), 0)
+
+    if (['credit', 'split', 'deposit'].includes(payment_method) && !customer_id) {
+      return error(res, 'customer_id is required for credit, split and deposit sales')
     }
     if (payment_method === 'split') {
       if (!amount_paid_now || amount_paid_now <= 0) return error(res, 'amount_paid_now is required for split sales')
       if (!['cash', 'transfer', 'pos'].includes(payment_method_now)) return error(res, 'payment_method_now must be cash, transfer or pos')
+    }
+    if (payment_method === 'deposit') {
+      if (!deposit_amount_used || deposit_amount_used <= 0) return error(res, 'deposit_amount_used is required for deposit sales')
+      if (Number(deposit_amount_used) < total_amount) {
+        if (!amount_paid_now || amount_paid_now <= 0) return error(res, 'amount_paid_now is required when the deposit does not cover the full total')
+        if (!['cash', 'transfer', 'pos'].includes(payment_method_now)) return error(res, 'payment_method_now must be cash, transfer or pos')
+      }
     }
 
     if (offline_id) {
@@ -87,8 +97,6 @@ router.post('/', async (req, res) => {
         return error(res, `Insufficient stock for product ${item.product_id}`)
       }
     }
-
-    const total_amount = items.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.unit_price)), 0)
 
     let creditAccount = null
     let creditPortion = total_amount
@@ -111,9 +119,10 @@ router.post('/', async (req, res) => {
         cashier_id: req.user.id,
         customer_id: customer_id || null,
         payment_method,
-        payment_method_now: payment_method === 'split' ? payment_method_now : null,
+        payment_method_now: ['split', 'deposit'].includes(payment_method) ? (payment_method_now || null) : null,
+        deposit_amount_used: payment_method === 'deposit' ? deposit_amount_used : null,
         total_amount,
-        amount_paid: payment_method === 'credit' ? total_amount : (payment_method === 'split' ? amount_paid_now : null),
+        amount_paid: payment_method === 'credit' ? total_amount : (['split', 'deposit'].includes(payment_method) ? (amount_paid_now || null) : null),
         payment_status: payment_method === 'credit' ? 'paid' : 'pending',
         status: 'completed',
         sale_type: 'regular',

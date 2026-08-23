@@ -18,7 +18,7 @@ async function confirmPayment(req, res, expectedMethod) {
     const { data: sale } = await supabase.from('sales').select('*').eq('id', sale_id).single()
     if (!sale) return error(res, 'Sale not found', 404)
 
-    const isSplit = sale.payment_method === 'split'
+    const isSplit = ['split', 'deposit'].includes(sale.payment_method)
     const actualMethod = isSplit ? sale.payment_method_now : sale.payment_method
     if (actualMethod !== expectedMethod) return error(res, `This sale was not created as a ${expectedMethod} sale`)
     if (sale.payment_status === 'paid') return error(res, 'This sale has already been paid')
