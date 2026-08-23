@@ -3,10 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2, Package, GitBranch, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import useAuthStore from '../../store/authStore'
 
 function ProductDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const isSuperAdmin = user?.role === 'super_admin'
   const [product, setProduct] = useState(null)
   const [branchProducts, setBranchProducts] = useState([])
   const [allBranches, setAllBranches] = useState([])
@@ -68,6 +71,10 @@ function ProductDetail() {
 
   const assignedBranchIds = branchProducts.map((bp) => bp.branch_id)
   const unassignedBranches = allBranches.filter((b) => !assignedBranchIds.includes(b.id))
+  // Admins can only assign this product to their own branch; super admin, any branch.
+  const assignableBranches = isSuperAdmin
+    ? unassignedBranches
+    : unassignedBranches.filter((b) => b.id === user?.branch_id)
 
   return (
     <div className="space-y-4">
@@ -146,7 +153,7 @@ function ProductDetail() {
             <GitBranch size={18} className="text-gray-500" />
             <h2 className="font-semibold text-gray-700">Branch Stock</h2>
           </div>
-          {unassignedBranches.length > 0 && (
+          {assignableBranches.length > 0 && (
             <button
               onClick={() => setShowAssignModal(true)}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-3 py-2 rounded-xl transition"
@@ -197,12 +204,14 @@ function ProductDetail() {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleRemoveFromBranch(bp.branch_id)}
-                    className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {(isSuperAdmin || bp.branch_id === user?.branch_id) && (
+                    <button
+                      onClick={() => handleRemoveFromBranch(bp.branch_id)}
+                      className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               )
             })}
@@ -215,7 +224,7 @@ function ProductDetail() {
         <AssignBranchModal
           productId={id}
           product={product}
-          branches={unassignedBranches}
+          branches={assignableBranches}
           suppliers={suppliers}
           onClose={() => setShowAssignModal(false)}
           onSaved={() => {

@@ -47,6 +47,7 @@ const navItems = [
       { label: 'Customers', icon: Users, path: '/admin/customers', roles: ['super_admin', 'admin'] },
       { label: 'Staff', icon: Users, path: '/admin/staff', roles: ['super_admin'] },
       { label: 'Credit & Debt', icon: Wallet, path: '/admin/credit', roles: ['super_admin', 'admin'] },
+      { label: 'Deposits', icon: Wallet, path: '/admin/deposits', roles: ['super_admin', 'admin'] },
     ]
   },
   {

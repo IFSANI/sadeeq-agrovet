@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
   }
 })
 
-router.post('/', requireRole('super_admin', 'admin'), async (req, res) => {
+router.post('/', requireRole('super_admin'), async (req, res) => {
   try {
     const { name, category, drug_type, unit_of_measurement, weight, brand, barcode, price, wholesale_price } = req.body
     if (!name || !category || !unit_of_measurement || price === undefined) {
@@ -138,7 +138,7 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-router.put('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
+router.put('/:id', requireRole('super_admin'), async (req, res) => {
   try {
     const { id } = req.params
     const { data: existing } = await supabase.from('products').select('*').eq('id', id).single()
@@ -160,7 +160,7 @@ router.put('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
   }
 })
 
-router.delete('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
+router.delete('/:id', requireRole('super_admin'), async (req, res) => {
   try {
     const { id } = req.params
     const { data: existing } = await supabase.from('products').select('*').eq('id', id).single()
@@ -176,7 +176,7 @@ router.delete('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
   }
 })
 
-router.post('/:id/generate-barcode', requireRole('super_admin', 'admin'), async (req, res) => {
+router.post('/:id/generate-barcode', requireRole('super_admin'), async (req, res) => {
   try {
     const { id } = req.params
     const { data: existing } = await supabase.from('products').select('id').eq('id', id).single()

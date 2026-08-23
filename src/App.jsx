@@ -18,6 +18,7 @@ import Customers from './pages/admin/Customers'
 import LooseCart from './pages/cashier/LooseCart'
 import CashierDashboard from './pages/cashier/CashierDashboard'
 import CreditDebt from './pages/admin/CreditDebt'
+import Deposits from './pages/admin/Deposits'
 import CustomerDetail from './pages/admin/CustomerDetail'
 import SupplierDebt from './pages/admin/SupplierDebt'
 import Expenses from './pages/admin/Expenses'
@@ -144,6 +145,9 @@ function App() {
         <Route path="/admin/credit" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><CreditDebt /></AdminPage></ProtectedRoute>
         } />
+        <Route path="/admin/deposits" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Deposits /></AdminPage></ProtectedRoute>
+        } />
         <Route path="/admin/expenses" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Expenses /></AdminPage></ProtectedRoute>
         } />
@@ -205,6 +209,9 @@ function App() {
         } />
         <Route path="/cashier/credit" element={
           <ProtectedRoute allowed={['cashier']}><CashierPage><CreditDebt /></CashierPage></ProtectedRoute>
+        } />
+        <Route path="/cashier/deposits" element={
+          <ProtectedRoute allowed={['cashier']}><CashierPage><Deposits /></CashierPage></ProtectedRoute>
         } />
         <Route path="/admin/supplier-debt" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><SupplierDebt /></AdminPage></ProtectedRoute>

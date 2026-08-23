@@ -14,6 +14,7 @@ const navItems = [
   { label: "Today's Sales", icon: Receipt, path: '/cashier/sales' },
   { label: 'Customers', icon: Users, path: '/cashier/customers' },
   { label: 'Credit & Debt', icon: Wallet, path: '/cashier/credit' },
+  { label: 'Deposits', icon: Wallet, path: '/cashier/deposits' },
 ]
 
 const chicksItems = [

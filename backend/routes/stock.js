@@ -97,8 +97,8 @@ router.post('/restock', requireRole('super_admin', 'admin'), async (req, res) =>
   try {
     let { branch_id, supplier_id, notes, items, amount_paid_now } = req.body
 
-    if (!branch_id) return error(res, 'branch_id is required')
     if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
+    if (!branch_id) return error(res, 'branch_id is required')
     if (!Array.isArray(items) || items.length === 0) return error(res, 'items array is required')
     for (const item of items) {
       if (!item.product_id || !item.quantity || item.cost_price === undefined) {
@@ -267,8 +267,8 @@ router.post('/transfer', async (req, res) => {
   try {
     let { from_branch_id, to_branch_id, notes, items } = req.body
 
-    if (!from_branch_id || !to_branch_id) return error(res, 'from_branch_id and to_branch_id are required')
     if (req.user.role !== 'super_admin') from_branch_id = req.user.branch_id
+    if (!from_branch_id || !to_branch_id) return error(res, 'from_branch_id and to_branch_id are required')
     if (from_branch_id === to_branch_id) return error(res, 'from_branch_id and to_branch_id must differ')
     if (!Array.isArray(items) || items.length === 0) return error(res, 'items array is required')
 

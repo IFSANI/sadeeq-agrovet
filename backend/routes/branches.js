@@ -86,6 +86,9 @@ router.delete('/:id', requireRole('super_admin', 'admin'), async (req, res) => {
 router.post('/:id/products', requireRole('super_admin', 'admin'), async (req, res) => {
   try {
     const branch_id = req.params.id
+    if (req.user.role !== 'super_admin' && branch_id !== req.user.branch_id) {
+      return error(res, 'Unauthorized', 403)
+    }
     const { product_id, initial_stock, low_stock_threshold, cost_price, supplier_id } = req.body
     if (!product_id) return error(res, 'product_id is required')
 
@@ -146,6 +149,9 @@ router.post('/:id/products', requireRole('super_admin', 'admin'), async (req, re
 router.delete('/:id/products/:productId', requireRole('super_admin', 'admin'), async (req, res) => {
   try {
     const { id: branch_id, productId: product_id } = req.params
+    if (req.user.role !== 'super_admin' && branch_id !== req.user.branch_id) {
+      return error(res, 'Unauthorized', 403)
+    }
     const { error: dbError } = await supabase.from('branch_products').update({ is_active: false }).eq('branch_id', branch_id).eq('product_id', product_id)
     if (dbError) return error(res, 'Could not remove product from branch', 500)
     return success(res, {}, 'Product removed from branch')
