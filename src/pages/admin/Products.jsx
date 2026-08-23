@@ -3,6 +3,7 @@ import { Plus, Search, Edit2, Trash2, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { useNavigate } from 'react-router-dom'
+import useAuthStore from '../../store/authStore'
 
 const CATEGORIES = ['drug', 'feed', 'accessory']
 const DRUG_TYPES = ['injection', 'powder', 'bolus', 'suspension', 'vaccine', 'syringe']
@@ -21,6 +22,8 @@ function Products() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const isSuperAdmin = user?.role === 'super_admin'
   
   const fetchProducts = async () => {
     setLoading(true)
@@ -67,13 +70,15 @@ function Products() {
           <h1 className="text-xl font-bold text-gray-800">Products</h1>
           <p className="text-sm text-gray-500 mt-0.5">{products.length} products registered</p>
         </div>
-        <button
-          onClick={() => { setEditing(null); setShowModal(true) }}
-          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition"
-        >
-          <Plus size={16} />
-          Add Product
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={() => { setEditing(null); setShowModal(true) }}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition"
+          >
+            <Plus size={16} />
+            Add Product
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -139,20 +144,22 @@ function Products() {
                       {product.barcode || 'No barcode'}
                     </td>
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleEdit(product) }}
-                          className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(product.id) }}
-                          className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      {isSuperAdmin && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEdit(product) }}
+                            className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDelete(product.id) }}
+                            className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

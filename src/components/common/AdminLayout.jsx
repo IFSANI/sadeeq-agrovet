@@ -7,6 +7,7 @@ import {
   Wallet, Receipt, ArrowLeftRight
 } from 'lucide-react'
 import useAuthStore from '../../store/authStore'
+import useBranchStore from '../../store/branchStore'
 import toast from 'react-hot-toast'
 
 const navItems = [
@@ -35,16 +36,16 @@ const navItems = [
   {
     section: 'Chicks',
     items: [
-      { label: 'Varieties', icon: Bird, path: '/admin/chicks/varieties', roles: ['super_admin', 'admin'] },
-      { label: 'Schedules', icon: Bird, path: '/admin/chicks/schedules', roles: ['super_admin', 'admin'] },
-      { label: 'Bookings', icon: Bird, path: '/admin/chicks/bookings', roles: ['super_admin', 'admin'] },
+      { label: 'Varieties', icon: Bird, path: '/admin/chicks/varieties', roles: ['super_admin', 'admin'], requireMainBranch: true },
+      { label: 'Schedules', icon: Bird, path: '/admin/chicks/schedules', roles: ['super_admin', 'admin'], requireMainBranch: true },
+      { label: 'Bookings', icon: Bird, path: '/admin/chicks/bookings', roles: ['super_admin', 'admin'], requireMainBranch: true },
     ]
   },
   {
     section: 'People',
     items: [
       { label: 'Customers', icon: Users, path: '/admin/customers', roles: ['super_admin', 'admin'] },
-      { label: 'Staff', icon: Users, path: '/admin/staff', roles: ['super_admin', 'admin'] },
+      { label: 'Staff', icon: Users, path: '/admin/staff', roles: ['super_admin'] },
       { label: 'Credit & Debt', icon: Wallet, path: '/admin/credit', roles: ['super_admin', 'admin'] },
     ]
   },
@@ -63,12 +64,17 @@ const navItems = [
 function AdminLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
+  const { user, logout, defaultBranchId } = useAuthStore()
+  const isMainBranchUser = useBranchStore((state) => state.isMainBranchUser)
 
   const visibleNavItems = navItems
   .map((group) => ({
     ...group,
-    items: group.items.filter((item) => item.roles.includes(user?.role)),
+    items: group.items.filter((item) => {
+      if (!item.roles.includes(user?.role)) return false
+      if (item.requireMainBranch && !isMainBranchUser(user, defaultBranchId)) return false
+      return true
+    }),
   }))
   .filter((group) => group.items.length > 0)
 

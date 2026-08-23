@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, ShoppingCart, Receipt, Users, Wallet, LogOut, Menu, X
+  LayoutDashboard, ShoppingCart, Receipt, Users, Wallet, LogOut, Menu, X, Bird
 } from 'lucide-react'
 import useAuthStore from '../../store/authStore'
+import useBranchStore from '../../store/branchStore'
 import toast from 'react-hot-toast'
 
 const navItems = [
@@ -15,10 +16,18 @@ const navItems = [
   { label: 'Credit & Debt', icon: Wallet, path: '/cashier/credit' },
 ]
 
+const chicksItems = [
+  { label: 'Chick Varieties', icon: Bird, path: '/cashier/chicks/varieties' },
+  { label: 'Delivery Schedules', icon: Bird, path: '/cashier/chicks/schedules' },
+  { label: 'Chick Bookings', icon: Bird, path: '/cashier/chicks/bookings' },
+]
+
 function CashierLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
+  const { user, logout, defaultBranchId } = useAuthStore()
+  const isMainBranchUser = useBranchStore((state) => state.isMainBranchUser)
+  const showChicks = isMainBranchUser(user, defaultBranchId)
 
   const handleLogout = () => {
     logout()
@@ -56,6 +65,21 @@ function CashierLayout({ children }) {
 
         <nav className="flex-1 overflow-y-auto py-4 px-3">
           {navItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition mb-0.5 ${
+                  isActive ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                }`
+              }
+            >
+              <item.icon size={18} />
+              {item.label}
+            </NavLink>
+          ))}
+          {showChicks && chicksItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

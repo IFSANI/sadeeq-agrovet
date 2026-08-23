@@ -11,6 +11,7 @@ import Branches from './pages/admin/Branches'
 import Suppliers from './pages/admin/Suppliers'
 import Staff from './pages/admin/Staff'
 import useAuthStore from './store/authStore'
+import useBranchStore from './store/branchStore'
 import Stock from './pages/admin/Stock'
 import SalesHistory from './pages/admin/SalesHistory'
 import Customers from './pages/admin/Customers'
@@ -57,15 +58,21 @@ function CashierPage({ children, title }) {
 
 // Guards a route by role. `allowed` is an array of roles permitted here.
 // Not logged in -> /login. Logged in but wrong role -> their own dashboard.
-function ProtectedRoute({ allowed, children }) {
-  const { user, isAuthenticated } = useAuthStore()
+function ProtectedRoute({ allowed, requireMainBranch, children }) {
+  const { user, isAuthenticated, defaultBranchId } = useAuthStore()
+  const isMainBranchUser = useBranchStore((state) => state.isMainBranchUser)
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
 
+  const fallback = user?.role === 'cashier' ? '/cashier/dashboard' : '/admin/dashboard'
+
   if (!allowed.includes(user?.role)) {
-    const fallback = user?.role === 'cashier' ? '/cashier/dashboard' : '/admin/dashboard'
+    return <Navigate to={fallback} replace />
+  }
+
+  if (requireMainBranch && !isMainBranchUser(user, defaultBranchId)) {
     return <Navigate to={fallback} replace />
   }
 
@@ -74,10 +81,18 @@ function ProtectedRoute({ allowed, children }) {
 
 function App() {
   const loadFromStorage = useAuthStore((state) => state.loadFromStorage)
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const fetchBranches = useBranchStore((state) => state.fetchBranches)
 
   useEffect(() => {
     loadFromStorage()
   }, [])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchBranches()
+    }
+  }, [isAuthenticated])
 
   return (
     <BrowserRouter>
@@ -106,16 +121,25 @@ function App() {
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Suppliers /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/staff" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><Staff /></AdminPage></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin']}><AdminPage><Staff /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/chicks/varieties" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Chick Varieties" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage title="Chick Varieties" /></ProtectedRoute>
         } />
         <Route path="/admin/chicks/schedules" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Delivery Schedules" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage title="Delivery Schedules" /></ProtectedRoute>
         } />
         <Route path="/admin/chicks/bookings" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage title="Chick Bookings" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage title="Chick Bookings" /></ProtectedRoute>
+        } />
+        <Route path="/cashier/chicks/varieties" element={
+          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage title="Chick Varieties" /></ProtectedRoute>
+        } />
+        <Route path="/cashier/chicks/schedules" element={
+          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage title="Delivery Schedules" /></ProtectedRoute>
+        } />
+        <Route path="/cashier/chicks/bookings" element={
+          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage title="Chick Bookings" /></ProtectedRoute>
         } />
         <Route path="/admin/credit" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><CreditDebt /></AdminPage></ProtectedRoute>
