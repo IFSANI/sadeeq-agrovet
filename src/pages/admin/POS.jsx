@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Search, Trash2, Plus, Minus, ShoppingCart, X, User, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { searchProducts } from '../../services/productService'
-import { createSale, confirmCashPayment, confirmTransferPayment, confirmPOSPayment } from '../../services/salesService'
+import { createSale, confirmCashPayment, confirmTransferPayment, confirmPOSPayment, confirmDepositPayment } from '../../services/salesService'
 import { getBranches } from '../../services/branchService'
 import Receipt from '../../components/pos/Receipt'
 import useAuthStore from '../../store/authStore'
@@ -590,9 +590,9 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
   const [amountPaidNow, setAmountPaidNow] = useState('')
   const [methodNow, setMethodNow] = useState('cash')
 
-  const allMethods = ['Cash', 'Transfer', 'POS', 'Credit', 'Split']
+  const allMethods = ['Cash', 'Transfer', 'POS', 'Credit', 'Split', 'Deposit']
   const methods = online ? allMethods : ['Cash', 'Transfer', 'POS']
-  const needsCustomer = method === 'Credit' || method === 'Split'
+  const needsCustomer = method === 'Credit' || method === 'Split' || method === 'Deposit'
   const remainingOnCredit = method === 'Split' ? Math.max(total - Number(amountPaidNow || 0), 0) : total
 
   const methodColors = {
@@ -601,7 +601,18 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
     POS: 'bg-purple-50 border-purple-300 text-purple-700',
     Credit: 'bg-orange-50 border-orange-300 text-orange-700',
     Split: 'bg-pink-50 border-pink-300 text-pink-700',
+    Deposit: 'bg-teal-50 border-teal-300 text-teal-700',
   }
+
+  const depositBalance = Number(customer?.deposit_account?.current_balance || 0)
+  const [depositAmountUsed, setDepositAmountUsed] = useState('')
+  const [remainderMethodNow, setRemainderMethodNow] = useState('cash')
+
+  useEffect(() => {
+    if (method === 'Deposit' && customer) {
+      setDepositAmountUsed(String(Math.min(depositBalance, total)))
+    }
+  }, [method])
 
   const handleOpenCredit = async () => {
     if (!customer) return
@@ -639,7 +650,7 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
       toast.error('Select a customer first for credit/split payment')
       return
     }
-    if (needsCustomer && !creditAccount) {
+    if ((method === 'Credit' || method === 'Split') && needsCustomer && !creditAccount) {
       toast.error('This customer has no credit account yet — open one first')
       return
     }
@@ -650,6 +661,20 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
       }
       if (Number(amountPaidNow) >= total) {
         toast.error('Amount paid now must be less than the total — use Cash/Transfer/POS instead if paying in full')
+        return
+      }
+    }
+    if (method === 'Deposit') {
+      if (!depositAmountUsed || Number(depositAmountUsed) <= 0) {
+        toast.error('Enter an amount to use from deposit')
+        return
+      }
+      if (Number(depositAmountUsed) > depositBalance) {
+        toast.error(`Cannot use more than the available deposit balance of ₦${depositBalance.toLocaleString()}`)
+        return
+      }
+      if (Number(depositAmountUsed) > total) {
+        toast.error('Amount from deposit cannot exceed the sale total')
         return
       }
     }
@@ -675,6 +700,14 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
       if (method === 'Split') {
         salePayload.amount_paid_now = Number(amountPaidNow)
         salePayload.payment_method_now = methodNow
+      }
+      if (method === 'Deposit') {
+        salePayload.deposit_amount_used = Number(depositAmountUsed)
+        const remainder = total - Number(depositAmountUsed)
+        if (remainder > 0) {
+          salePayload.amount_paid_now = remainder
+          salePayload.payment_method_now = remainderMethodNow
+        }
       }
 
       if (!online) {
@@ -717,6 +750,12 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         paymentRes = saleRes
       } else if (method === 'Split') {
         paymentRes = await confirmUpfrontPayment(saleId, Number(amountPaidNow), methodNow)
+      } else if (method === 'Deposit') {
+        paymentRes = await confirmDepositPayment(saleId, Number(depositAmountUsed))
+        const remainder = total - Number(depositAmountUsed)
+        if (remainder > 0) {
+          paymentRes = await confirmUpfrontPayment(saleId, remainder, remainderMethodNow)
+        }
       }
 
       if (paymentRes?.success) {
@@ -849,6 +888,51 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
             <p className="text-2xl font-bold mt-1">₦{total.toLocaleString()}</p>
           </div>
         )}
+                {method === 'Deposit' && customer && (
+          <div className="mb-4 space-y-3">
+            <div className="bg-teal-50 rounded-xl p-3 text-sm text-teal-700 flex justify-between">
+              <span>Deposit balance</span>
+              <span className="font-bold">₦{depositBalance.toLocaleString()}</span>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Amount to Use from Deposit (₦)</label>
+              <input
+                type="number"
+                value={depositAmountUsed}
+                onChange={(e) => setDepositAmountUsed(e.target.value)}
+                placeholder={`Up to ${Math.min(depositBalance, total).toLocaleString()}`}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+              />
+            </div>
+            {Number(depositAmountUsed || 0) > 0 && Number(depositAmountUsed) < total && (
+              <>
+                <div className="bg-teal-50 rounded-xl p-3 text-sm text-teal-700 flex justify-between">
+                  <span>Remaining to pay now</span>
+                  <span className="font-bold">₦{(total - Number(depositAmountUsed)).toLocaleString()}</span>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Pay Remainder Via</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['cash', 'transfer', 'pos'].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setRemainderMethodNow(m)}
+                        className={`py-2 rounded-xl border-2 text-xs font-semibold capitalize transition ${
+                          remainderMethodNow === m
+                            ? 'bg-teal-50 border-teal-400 text-teal-700'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {method === 'Split' && customer && creditAccount && (
           <div className="mb-4 space-y-3">
@@ -890,7 +974,12 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
 
         <button
           onClick={handleCompleteSale}
-          disabled={!method || processing || (needsCustomer && (!customer || !creditAccount))}
+          disabled={
+            !method || processing ||
+            (needsCustomer && !customer) ||
+            ((method === 'Credit' || method === 'Split') && needsCustomer && !creditAccount) ||
+            (method === 'Deposit' && (!depositAmountUsed || Number(depositAmountUsed) <= 0 || Number(depositAmountUsed) > depositBalance))
+          }
           className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {processing

@@ -70,6 +70,61 @@ async function confirmPayment(req, res, expectedMethod) {
 router.post('/cash', (req, res) => confirmPayment(req, res, 'cash'))
 router.post('/transfer/confirm', (req, res) => confirmPayment(req, res, 'transfer'))
 router.post('/pos/confirm', (req, res) => confirmPayment(req, res, 'pos'))
+router.post('/deposit/confirm', async (req, res) => {
+  try {
+    if (!['super_admin', 'admin', 'cashier'].includes(req.user.role)) {
+      return error(res, 'Unauthorized', 403)
+    }
+
+    const { sale_id, amount } = req.body
+    if (!sale_id) return error(res, 'sale_id is required')
+    if (!amount || amount <= 0) return error(res, 'A valid amount is required')
+
+    const { data: sale } = await supabase.from('sales').select('*').eq('id', sale_id).single()
+    if (!sale) return error(res, 'Sale not found', 404)
+    if (sale.payment_status === 'paid') return error(res, 'This sale has already been paid')
+    if (!sale.customer_id) return error(res, 'This sale has no customer attached — cannot pay via deposit')
+
+    const { data: account } = await supabase.from('deposit_accounts').select('*').eq('customer_id', sale.customer_id).maybeSingle()
+    if (!account) return error(res, 'This customer has no deposit account')
+    if (Number(amount) > Number(account.current_balance)) return error(res, "Amount exceeds the customer's deposit balance")
+
+    const newBalance = Number(account.current_balance) - Number(amount)
+
+    const { error: balErr } = await supabase.from('deposit_accounts').update({ current_balance: newBalance }).eq('id', account.id)
+    if (balErr) return error(res, 'Could not update deposit balance', 500)
+
+    await supabase.from('deposit_transactions').insert({
+      deposit_account_id: account.id, type: 'deposit_out', amount, sale_id, balance_after: newBalance, note: null
+    })
+
+    const { data: payment, error: payErr } = await supabase
+      .from('payments')
+      .insert({ sale_id, amount, payment_method: 'deposit', confirmed_by: req.user.id })
+      .select().single()
+
+    if (payErr) return error(res, 'Could not record payment', 500)
+
+    const hasTopUp = sale.payment_method === 'split' && ['cash', 'transfer', 'pos'].includes(sale.payment_method_now)
+
+    let updatedSale = sale
+    if (!hasTopUp) {
+      const { data: fullyPaidSale, error: saleErr } = await supabase
+        .from('sales')
+        .update({ amount_paid: amount, change_given: 0, payment_status: 'paid' })
+        .eq('id', sale_id).select().single()
+      if (saleErr) return error(res, 'Could not update sale', 500)
+      updatedSale = fullyPaidSale
+    }
+
+    await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'confirm_payment', entity_type: 'payment', entity_id: payment.id, new_value: payment })
+
+    return success(res, { payment, sale: updatedSale, deposit_balance: newBalance },
+      hasTopUp ? 'Deposit portion confirmed — top-up payment still required' : 'Payment confirmed')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 import axios from 'axios'
 
 router.post('/online/initialize', async (req, res) => {

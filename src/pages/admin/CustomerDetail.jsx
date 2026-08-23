@@ -18,6 +18,10 @@ function CustomerDetail() {
   const [loadingTransactions, setLoadingTransactions] = useState(true)
   const [showRepay, setShowRepay] = useState(false)
   const [showAdjust, setShowAdjust] = useState(false)
+  const [depositTransactions, setDepositTransactions] = useState([])
+  const [loadingDepositTransactions, setLoadingDepositTransactions] = useState(true)
+  const [showRecordDeposit, setShowRecordDeposit] = useState(false)
+  const [showAdjustDeposit, setShowAdjustDeposit] = useState(false)
   const { user } = useAuthStore()
   const canAdjustDebt = user?.role === 'admin' || user?.role === 'super_admin'
   const { online } = useOnlineStatus()
@@ -58,10 +62,23 @@ function CustomerDetail() {
     }
   }
 
+  const fetchDepositTransactions = async () => {
+    setLoadingDepositTransactions(true)
+    try {
+      const res = await api.get(`/api/customers/${id}/deposit/transactions`)
+      if (res.data.success) setDepositTransactions(res.data.data)
+    } catch {
+      // silent
+    } finally {
+      setLoadingDepositTransactions(false)
+    }
+  }
+
   useEffect(() => {
     fetchCustomer()
     fetchPurchases()
     fetchTransactions()
+    fetchDepositTransactions()
   }, [id])
 
   if (loading) {
@@ -83,6 +100,9 @@ function CustomerDetail() {
   const account = customer.credit_account
   const balance = Number(account?.current_balance || 0)
   const limit = Number(account?.credit_limit || 0)
+
+  const depositAccount = customer.deposit_account
+  const depositBalance = Number(depositAccount?.current_balance || 0)
 
   return (
     <div className="space-y-4">
@@ -169,6 +189,39 @@ function CustomerDetail() {
         )}
       </div>
 
+      {/* Deposit Account */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Wallet size={18} className="text-gray-500" />
+            <h2 className="font-semibold text-gray-700">Deposit Account</h2>
+          </div>
+          <div className="flex items-center gap-3">
+            {canAdjustDebt && (
+              <button
+                onClick={() => setShowAdjustDeposit(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700"
+              >
+                <PlusCircle size={14} />
+                Add Historical Deposit
+              </button>
+            )}
+            <button
+              onClick={() => setShowRecordDeposit(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-green-600 hover:text-green-700"
+            >
+              <PlusCircle size={14} />
+              Record Deposit
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-green-50 rounded-xl p-4">
+          <p className="text-xs text-gray-500 mb-1">Deposit Balance</p>
+          <p className="text-xl font-bold text-green-600">₦{depositBalance.toLocaleString()}</p>
+        </div>
+      </div>
+
       {/* Transaction History */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
         <div className="px-5 py-4 border-b border-gray-100">
@@ -206,6 +259,52 @@ function CustomerDetail() {
                 <div className="text-right">
                   <p className={`text-sm font-bold ${t.type === 'debit' ? 'text-red-500' : 'text-green-600'}`}>
                     {t.type === 'debit' ? '+' : '-'}₦{Number(t.amount).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-400">Balance: ₦{Number(t.balance_after).toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Deposit Transaction History */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-700">Deposit Transaction History</h2>
+        </div>
+
+        {loadingDepositTransactions ? (
+          <div className="flex items-center justify-center py-10">
+            <span className="w-6 h-6 border-4 border-green-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : depositTransactions.length === 0 ? (
+          <div className="text-center py-10">
+            <p className="text-gray-400 text-sm">No deposit transactions yet</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {depositTransactions.map((t) => (
+              <div key={t.id} className="px-5 py-3 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg ${
+                      t.type === 'deposit_out' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+                    }`}>
+                      {t.type === 'deposit_out' ? 'Used at Checkout' : 'Deposit Added'}
+                    </span>
+                    {!t.sale_id && (
+                      <span className="text-xs text-gray-400 italic">manual entry</span>
+                    )}
+                  </div>
+                  {t.note && <p className="text-xs text-gray-500 mt-1">{t.note}</p>}
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {new Date(t.created_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className={`text-sm font-bold ${t.type === 'deposit_out' ? 'text-red-500' : 'text-green-600'}`}>
+                    {t.type === 'deposit_out' ? '-' : '+'}₦{Number(t.amount).toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-400">Balance: ₦{Number(t.balance_after).toLocaleString()}</p>
                 </div>
@@ -286,6 +385,30 @@ function CustomerDetail() {
             setShowAdjust(false)
             fetchCustomer()
             fetchTransactions()
+          }}
+        />
+      )}
+
+      {showRecordDeposit && (
+        <RecordDepositModal
+          customer={customer}
+          onClose={() => setShowRecordDeposit(false)}
+          onSaved={() => {
+            setShowRecordDeposit(false)
+            fetchCustomer()
+            fetchDepositTransactions()
+          }}
+        />
+      )}
+
+      {showAdjustDeposit && (
+        <AdjustDepositModal
+          customer={customer}
+          onClose={() => setShowAdjustDeposit(false)}
+          onSaved={() => {
+            setShowAdjustDeposit(false)
+            fetchCustomer()
+            fetchDepositTransactions()
           }}
         />
       )}
@@ -518,6 +641,203 @@ function RepaymentModal({ customer, online, onClose, onSaved }) {
               className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60"
             >
               {saving ? 'Recording...' : 'Record Repayment'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function RecordDepositModal({ customer, onClose, onSaved }) {
+  const [amount, setAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [reference, setReference] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const balance = Number(customer.deposit_account?.current_balance || 0)
+  const methods = ['cash', 'transfer', 'pos']
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!amount || Number(amount) <= 0) {
+      toast.error('Enter a valid amount')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = { amount: Number(amount), payment_method: paymentMethod }
+      if (reference) payload.reference = reference
+
+      const res = await api.post(`/api/customers/${customer.id}/deposit/add`, payload)
+      if (res.data.success) {
+        toast.success('Deposit recorded!')
+        onSaved()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to record deposit')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-800">Record Deposit</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+
+        <div className="bg-green-50 rounded-xl p-4 mb-5">
+          <p className="text-sm font-medium text-gray-800">{customer.name}</p>
+          <p className="text-sm text-green-700 mt-2">
+            Currently holds <span className="font-bold">₦{balance.toLocaleString()}</span> on deposit
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Amount Received (₦) *</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="e.g. 10000"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Received Via</label>
+            <div className="grid grid-cols-3 gap-2">
+              {methods.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPaymentMethod(m)}
+                  className={`py-2 rounded-xl border-2 text-xs font-semibold capitalize transition ${
+                    paymentMethod === m
+                      ? 'bg-green-50 border-green-400 text-green-700'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Reference (optional)</label>
+            <input
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="e.g. transaction ID, note"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60"
+            >
+              {saving ? 'Recording...' : 'Record Deposit'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function AdjustDepositModal({ customer, onClose, onSaved }) {
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!amount || Number(amount) <= 0) {
+      toast.error('Enter a valid amount')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = { amount: Number(amount) }
+      if (note) payload.note = note
+
+      const res = await api.post(`/api/customers/${customer.id}/deposit/adjust`, payload)
+      if (res.data.success) {
+        toast.success('Historical deposit added!')
+        onSaved()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add deposit')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-800">Add Historical Deposit</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          For deposit balance carried over from before this system was in use — not tied to any specific transaction.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Amount (₦) *</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="e.g. 15000"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Note (optional)</label>
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Deposit balance from before Jan 2026"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60"
+            >
+              {saving ? 'Adding...' : 'Add Deposit'}
             </button>
           </div>
         </form>

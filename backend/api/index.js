@@ -17,6 +17,7 @@ import creditRoutes from '../routes/credit.js'
 import expenseRoutes from '../routes/expenses.js'
 import reportRoutes from '../routes/reports.js'
 import notificationRoutes from '../routes/notifications.js'
+import depositRoutes from '../routes/deposits.js'
 
 const app = express()
 app.use(cors())
@@ -38,5 +39,7 @@ app.use('/api/settings', settingsRoutes)
 app.use('/api/expenses', expenseRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/notifications', notificationRoutes)
+app.use('/api/customers', creditRoutes)
+app.use('/api/customers', depositRoutes)
 
 export default app

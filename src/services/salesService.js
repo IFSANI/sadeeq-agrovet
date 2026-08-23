@@ -20,6 +20,11 @@ export const confirmPOSPayment = async (saleId) => {
   return response.data
 }
 
+export const confirmDepositPayment = async (saleId, amount) => {
+  const response = await api.post('/api/payments/deposit/confirm', { sale_id: saleId, amount })
+  return response.data
+}
+
 export const createCreditSale = async (saleData) => {
   const response = await api.post('/api/sales', { ...saleData, payment_method: 'credit' })
   return response.data

@@ -12,7 +12,7 @@ router.get('/', requireRole('super_admin', 'admin', 'cashier'), async (req, res)
   try {
     const { data, error: dbError } = await supabase
       .from('customers')
-      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status)')
+      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status), deposit_account:deposit_accounts(id, current_balance)')
       .order('name', { ascending: true })
     if (dbError) return error(res, 'Could not fetch customers', 500)
     return success(res, data, 'Customers fetched')
@@ -64,7 +64,7 @@ router.get('/:id', requireRole('super_admin', 'admin', 'cashier'), async (req, r
   try {
     const { data, error: dbError } = await supabase
       .from('customers')
-      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status)')
+      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status), deposit_account:deposit_accounts(id, current_balance)')
       .eq('id', req.params.id).single()
     if (dbError || !data) return error(res, 'Customer not found', 404)
     return success(res, data, 'Customer fetched')
