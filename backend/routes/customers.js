@@ -50,7 +50,7 @@ router.get('/search', requireRole('super_admin', 'admin', 'cashier'), async (req
 
     const { data, error: dbError } = await supabase
   .from('customers')
-  .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status)')
+  .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status), deposit_account:deposit_accounts(id, current_balance)')
   .or(`name.ilike.%${q}%,phone.ilike.%${q}%`).limit(50)
 
     if (dbError) return error(res, 'Search failed', 500)
