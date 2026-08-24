@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Plus, Package, X, ShoppingBag, Lock } from 'lucide-react'
+import { Plus, Package, X, ShoppingBag, Lock, GitBranch } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
+import useBranchStore from '../../store/branchStore'
 import useOnlineStatus from '../../hooks/useOnlineStatus'
 import { cacheOpenCart, getCachedCart, queueCartItem, queueCartClose, searchLocalProducts } from '../../services/offlineSync'
 
@@ -12,10 +13,28 @@ function LooseCart() {
   const [showAddItem, setShowAddItem] = useState(false)
   const [showClose, setShowClose] = useState(false)
   const { user, defaultBranchId } = useAuthStore()
-  const branchId = user?.branch_id || defaultBranchId
+  const branches = useBranchStore((state) => state.branches)
+  const isSuperAdmin = user?.role === 'super_admin'
+  const [selectedBranchId, setSelectedBranchId] = useState('')
   const { online } = useOnlineStatus()
 
+  // Resolve which branch's cart we're working with.
+  // Cashier/admin: always their own fixed branch — never changes.
+  // Super admin: their saved default branch, falling back to whichever
+  // branch is flagged as main, so there's always a sensible starting point
+  // even if they've never set a default.
+  useEffect(() => {
+    if (isSuperAdmin && !selectedBranchId) {
+      const fallback = defaultBranchId || branches.find((b) => b.is_main)?.id || branches[0]?.id || ''
+      if (fallback) setSelectedBranchId(fallback)
+    }
+  }, [isSuperAdmin, branches, defaultBranchId])
+
+  const branchId = isSuperAdmin ? selectedBranchId : user?.branch_id
+  const branchName = branches.find((b) => b.id === branchId)?.name
+
   const fetchOpenCart = async () => {
+    if (!branchId) return
     setLoading(true)
     try {
       if (!online) {
@@ -35,7 +54,7 @@ function LooseCart() {
     }
   }
 
-  useEffect(() => { fetchOpenCart() }, [online])
+  useEffect(() => { fetchOpenCart() }, [online, branchId])
 
   const openNewCart = async () => {
   try {
@@ -54,10 +73,41 @@ function LooseCart() {
   return (
     <div className="space-y-4">
 
-      <div>
-        <h1 className="text-xl font-bold text-gray-800">Loose Cart</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Sell bulk stock as individual pieces</p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">Loose Cart</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Sell bulk stock as individual pieces</p>
+        </div>
+        {branchName && (
+          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg">
+            <GitBranch size={14} />
+            Cart for: {branchName}
+          </div>
+        )}
       </div>
+
+      {/* Branch Selector — super admin only */}
+      {isSuperAdmin && branches.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <label className="block text-sm font-medium text-gray-600 mb-1">
+            Open Cart For Branch
+          </label>
+          <select
+            value={selectedBranchId}
+            onChange={(e) => setSelectedBranchId(e.target.value)}
+            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+          >
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} {b.is_main ? '(Main)' : ''} {b.id === defaultBranchId ? '★ Default' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-400 mt-1">
+            If a cart is already open for this branch, it loads automatically below.
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16">
@@ -68,12 +118,16 @@ function LooseCart() {
           <ShoppingBag size={48} className="text-gray-200 mx-auto mb-3" />
           <p className="text-gray-400 font-medium mb-4">No open cart</p>
           {online ? (
-            <button
-              onClick={openNewCart}
-              className="bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
-            >
-              Open New Cart
-            </button>
+            branchId ? (
+              <button
+                onClick={openNewCart}
+                className="bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
+              >
+                Open New Cart
+              </button>
+            ) : (
+              <p className="text-xs text-gray-400">Select a branch above first</p>
+            )
           ) : (
             <p className="text-xs text-gray-400">
               Opening a new cart needs an internet connection — reconnect first
@@ -142,9 +196,9 @@ function LooseCart() {
       {showAddItem && cart && (
         <AddItemModal
           cartId={cart.id}
+          branchId={branchId}
           online={online}
           onClose={() => setShowAddItem(false)}
-          
           onAdded={() => {
             setShowAddItem(false)
             fetchOpenCart()
@@ -168,15 +222,13 @@ function LooseCart() {
   )
 }
 
-function AddItemModal({ cartId, online, onClose, onAdded }) {
+function AddItemModal({ cartId, branchId, online, onClose, onAdded }) {
   const [search, setSearch] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
   const [quantity, setQuantity] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
   const [saving, setSaving] = useState(false)
-  const { user, defaultBranchId } = useAuthStore()
-  const branchId = user?.branch_id || defaultBranchId
 
   useEffect(() => {
     if (search.length < 2) { setResults([]); return }

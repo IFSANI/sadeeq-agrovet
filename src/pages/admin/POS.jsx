@@ -899,10 +899,12 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
               <input
                 type="number"
                 value={depositAmountUsed}
-                onChange={(e) => setDepositAmountUsed(e.target.value)}
-                placeholder={`Up to ${Math.min(depositBalance, total).toLocaleString()}`}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                disabled
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
               />
+              <p className="text-xs text-gray-400 mt-1">
+                Automatically set to the lower of the sale total or the customer's deposit balance
+              </p>
             </div>
             {Number(depositAmountUsed || 0) > 0 && Number(depositAmountUsed) < total && (
               <>
