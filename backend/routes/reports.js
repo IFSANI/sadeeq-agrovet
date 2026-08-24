@@ -61,7 +61,46 @@ router.get('/sales', async (req, res) => {
     return error(res, 'Server error', 500)
   }
 })
+router.get('/customers/top-spenders', async (req, res) => {
+  try {
+    let { date_from, date_to, branch_id } = req.query
+    if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
 
+    let query = supabase
+      .from('sales')
+      .select('customer_id, total_amount, customers(name, phone)')
+      .eq('status', 'completed')
+      .not('customer_id', 'is', null)
+
+    if (branch_id) query = query.eq('branch_id', branch_id)
+    if (date_from) query = query.gte('created_at', date_from)
+    if (date_to) query = query.lte('created_at', date_to)
+
+    const { data, error: dbError } = await query
+    if (dbError) return error(res, 'Could not generate top spenders report', 500)
+
+    const byCustomer = {}
+    for (const sale of data) {
+      if (!byCustomer[sale.customer_id]) {
+        byCustomer[sale.customer_id] = {
+          customer_id: sale.customer_id,
+          name: sale.customers?.name,
+          phone: sale.customers?.phone,
+          total_spent: 0,
+          purchase_count: 0
+        }
+      }
+      byCustomer[sale.customer_id].total_spent += Number(sale.total_amount)
+      byCustomer[sale.customer_id].purchase_count += 1
+    }
+
+    const result = Object.values(byCustomer).sort((a, b) => b.total_spent - a.total_spent)
+
+    return success(res, result, 'Top spenders report generated')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 router.get('/stock', async (req, res) => {
   try {
     let { branch_id } = req.query

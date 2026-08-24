@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { TrendingUp, Package, Wallet, Receipt, PieChart, Truck } from 'lucide-react'
+import { TrendingUp, Package, Wallet, Receipt, PieChart, Truck, Users } from 'lucide-react'
 import useAuthStore from '../../store/authStore'
 
 function ReportsHub() {
@@ -10,6 +10,7 @@ function ReportsHub() {
     { label: 'Sales Report', desc: 'Revenue and transactions by date/branch', icon: TrendingUp, path: '/admin/reports/sales', color: 'bg-green-50 text-green-600' },
     { label: 'Stock Report', desc: 'Inventory value and low stock', icon: Package, path: '/admin/reports/stock', color: 'bg-blue-50 text-blue-600' },
     { label: 'Debt Report', desc: 'Customer credit outstanding', icon: Wallet, path: '/admin/reports/debt', color: 'bg-red-50 text-red-600' },
+    { label: 'Customer Report', desc: 'Top spenders and top debtors', icon: Users, path: '/admin/reports/customers', color: 'bg-teal-50 text-teal-600' },
     { label: 'Expense Report', desc: 'Spending by category', icon: Receipt, path: '/admin/reports/expenses', color: 'bg-orange-50 text-orange-600' },
     { label: 'Profit & Loss', desc: 'Revenue minus cost and expenses', icon: PieChart, path: '/admin/reports/profit-loss', color: 'bg-purple-50 text-purple-600' },
   ]

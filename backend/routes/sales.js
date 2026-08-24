@@ -37,9 +37,9 @@ router.get('/', async (req, res) => {
     if (req.user.role !== 'super_admin') branch = req.user.branch_id
 
     let query = supabase
-  .from('sales')
-  .select('*, customers(name, phone), branches(name), users:cashier_id(name)')
-  .order('created_at', { ascending: false })
+      .from('sales')
+      .select('*, customers(name, phone), branches(name), users:cashier_id(name)')
+      .order('created_at', { ascending: false })
 
     if (branch) query = query.eq('branch_id', branch)
     if (status) query = query.eq('status', status)
