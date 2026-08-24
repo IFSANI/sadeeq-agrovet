@@ -606,7 +606,6 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
 
   const depositBalance = Number(customer?.deposit_account?.current_balance || 0)
   const [depositAmountUsed, setDepositAmountUsed] = useState('')
-  const [remainderMethodNow, setRemainderMethodNow] = useState('cash')
 
   useEffect(() => {
     if (method === 'Deposit' && customer) {
@@ -665,16 +664,8 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
       }
     }
     if (method === 'Deposit') {
-      if (!depositAmountUsed || Number(depositAmountUsed) <= 0) {
-        toast.error('Enter an amount to use from deposit')
-        return
-      }
-      if (Number(depositAmountUsed) > depositBalance) {
-        toast.error(`Cannot use more than the available deposit balance of ₦${depositBalance.toLocaleString()}`)
-        return
-      }
-      if (Number(depositAmountUsed) > total) {
-        toast.error('Amount from deposit cannot exceed the sale total')
+      if (depositBalance < total) {
+        toast.error(`Insufficient deposit balance. Customer has ₦${depositBalance.toLocaleString()}, sale total is ₦${total.toLocaleString()}.`)
         return
       }
     }
@@ -702,12 +693,7 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         salePayload.payment_method_now = methodNow
       }
       if (method === 'Deposit') {
-        salePayload.deposit_amount_used = Number(depositAmountUsed)
-        const remainder = total - Number(depositAmountUsed)
-        if (remainder > 0) {
-          salePayload.amount_paid_now = remainder
-          salePayload.payment_method_now = remainderMethodNow
-        }
+        salePayload.deposit_amount_used = total
       }
 
       if (!online) {
@@ -751,16 +737,19 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
       } else if (method === 'Split') {
         paymentRes = await confirmUpfrontPayment(saleId, Number(amountPaidNow), methodNow)
       } else if (method === 'Deposit') {
-        paymentRes = await confirmDepositPayment(saleId, Number(depositAmountUsed))
-        const remainder = total - Number(depositAmountUsed)
-        if (remainder > 0) {
-          paymentRes = await confirmUpfrontPayment(saleId, remainder, remainderMethodNow)
-        }
+        paymentRes = await confirmDepositPayment(saleId, total)
       }
 
       if (paymentRes?.success) {
         toast.success('Sale completed!')
-        onSuccess(paymentRes.data.sale || saleRes.data)
+        try {
+          const receiptRes = await api.get(`/api/sales/${saleId}/receipt`)
+          onSuccess(receiptRes.data.success ? receiptRes.data.data : (paymentRes.data.sale || saleRes.data))
+        } catch {
+          // Fallback to whatever the payment confirmation gave us, so a
+          // slow/failed receipt fetch never blocks completing the sale.
+          onSuccess(paymentRes.data.sale || saleRes.data)
+        }
       } else {
         toast.error('Payment confirmation failed')
       }
@@ -894,44 +883,28 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
               <span>Deposit balance</span>
               <span className="font-bold">₦{depositBalance.toLocaleString()}</span>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Amount to Use from Deposit (₦)</label>
-              <input
-                type="number"
-                value={depositAmountUsed}
-                disabled
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                Automatically set to the lower of the sale total or the customer's deposit balance
-              </p>
-            </div>
-            {Number(depositAmountUsed || 0) > 0 && Number(depositAmountUsed) < total && (
-              <>
-                <div className="bg-teal-50 rounded-xl p-3 text-sm text-teal-700 flex justify-between">
-                  <span>Remaining to pay now</span>
-                  <span className="font-bold">₦{(total - Number(depositAmountUsed)).toLocaleString()}</span>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Pay Remainder Via</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['cash', 'transfer', 'pos'].map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setRemainderMethodNow(m)}
-                        className={`py-2 rounded-xl border-2 text-xs font-semibold capitalize transition ${
-                          remainderMethodNow === m
-                            ? 'bg-teal-50 border-teal-400 text-teal-700'
-                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
+
+            {depositBalance >= total ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Amount to Use from Deposit (₦)</label>
+                <input
+                  type="number"
+                  value={depositAmountUsed}
+                  disabled
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Full amount covered by deposit
+                </p>
+              </div>
+            ) : (
+              <div className="bg-red-50 rounded-xl p-4 text-sm text-red-600">
+                <p className="font-medium">Insufficient deposit balance.</p>
+                <p className="mt-1 text-xs">
+                  Customer has ₦{depositBalance.toLocaleString()} but the sale total is ₦{total.toLocaleString()}.
+                  Choose a different payment method, or record more of their deposit first (from the Deposits page), then come back to this sale.
+                </p>
+              </div>
             )}
           </div>
         )}
@@ -980,7 +953,7 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
             !method || processing ||
             (needsCustomer && !customer) ||
             ((method === 'Credit' || method === 'Split') && needsCustomer && !creditAccount) ||
-            (method === 'Deposit' && (!depositAmountUsed || Number(depositAmountUsed) <= 0 || Number(depositAmountUsed) > depositBalance))
+            (method === 'Deposit' && customer && depositBalance < total)
           }
           className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
