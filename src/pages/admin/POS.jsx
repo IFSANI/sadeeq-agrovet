@@ -809,10 +809,6 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
 
         {method === 'Transfer' && (
           <div className="mb-4 bg-blue-50 rounded-xl p-4 text-sm text-blue-700">
-            <p className="font-medium mb-1">Ask customer to transfer to:</p>
-            <p>Bank: First Bank</p>
-            <p>Account: 1234567890</p>
-            <p>Name: Sadeeq Agrovet</p>
             <p className="mt-2 font-medium">Confirm on your bank app before proceeding.</p>
           </div>
         )}
