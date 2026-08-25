@@ -33,6 +33,7 @@ import ExpenseReport from './pages/admin/reports/ExpenseReport'
 import ProfitLossReport from './pages/admin/reports/ProfitLossReport'
 import SupplierDebtSummary from './pages/admin/reports/SupplierDebtSummary'
 import CustomerReport from './pages/admin/reports/CustomerReport'
+import ChicksProfitLoss from './pages/admin/reports/ChicksProfitLoss'
 
 function ComingSoon({ title }) {
   return (
@@ -178,6 +179,9 @@ function App() {
         } />
         <Route path="/admin/reports/customers" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><CustomerReport /></AdminPage></ProtectedRoute>
+        } />
+        <Route path="/admin/reports/chicks-profit-loss" element={
+          <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><ChicksProfitLoss /></AdminPage></ProtectedRoute>
         } />      
         <Route path="/admin/settings" element={
           <ProtectedRoute allowed={['super_admin']}><AdminPage title="Settings" /></ProtectedRoute>

@@ -296,5 +296,72 @@ router.get('/supplier-debt', requireRole('super_admin'), async (req, res) => {
     return error(res, 'Server error', 500)
   }
 })
+router.get('/chicks/profit-loss', async (req, res) => {
+  try {
+    let { date_from, date_to, branch_id } = req.query
+    if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
+
+    let query = supabase
+      .from('chick_bookings')
+      .select('id, total_amount, branch_id, created_at, chick_booking_items(cartons, pieces, subtotal, chick_varieties(name, pieces_per_carton), chick_delivery_schedules(cost_per_carton))')
+      .eq('payment_status', 'paid')
+      .neq('booking_status', 'cancelled')
+
+    if (branch_id) query = query.eq('branch_id', branch_id)
+    if (date_from) query = query.gte('created_at', date_from)
+    if (date_to) query = query.lte('created_at', date_to)
+
+    const { data: bookings, error: dbError } = await query
+    if (dbError) return error(res, 'Could not generate chicks P&L report', 500)
+
+    let revenue = 0
+    let cost_of_goods_sold = 0
+    let bookings_missing_cost = 0
+    const byVariety = {}
+
+    for (const booking of bookings) {
+      revenue += Number(booking.total_amount)
+      let bookingHasMissingCost = false
+
+      for (const item of booking.chick_booking_items || []) {
+        const varietyName = item.chick_varieties?.name || 'Unknown'
+        const piecesPerCarton = item.chick_varieties?.pieces_per_carton || 50
+        const costPerCarton = item.chick_delivery_schedules?.cost_per_carton
+        const cartonsEquivalent = Number(item.cartons || 0) + (Number(item.pieces || 0) / piecesPerCarton)
+
+        if (costPerCarton === null || costPerCarton === undefined) bookingHasMissingCost = true
+        const itemCost = costPerCarton != null ? cartonsEquivalent * Number(costPerCarton) : 0
+        cost_of_goods_sold += itemCost
+
+        if (!byVariety[varietyName]) byVariety[varietyName] = { variety_name: varietyName, quantity_cartons_equivalent: 0, revenue: 0, cogs: 0 }
+        byVariety[varietyName].quantity_cartons_equivalent += cartonsEquivalent
+        byVariety[varietyName].revenue += Number(item.subtotal)
+        byVariety[varietyName].cogs += itemCost
+      }
+
+      if (bookingHasMissingCost) bookings_missing_cost += 1
+    }
+
+    const gross_profit = revenue - cost_of_goods_sold
+
+    const by_variety = Object.values(byVariety).map(v => ({
+      variety_name: v.variety_name,
+      quantity_cartons_equivalent: Math.round(v.quantity_cartons_equivalent * 100) / 100,
+      revenue: Math.round(v.revenue * 100) / 100,
+      cogs: Math.round(v.cogs * 100) / 100,
+      gross_profit: Math.round((v.revenue - v.cogs) * 100) / 100
+    })).sort((a, b) => b.gross_profit - a.gross_profit)
+
+    return success(res, {
+      revenue: Math.round(revenue * 100) / 100,
+      cost_of_goods_sold: Math.round(cost_of_goods_sold * 100) / 100,
+      gross_profit: Math.round(gross_profit * 100) / 100,
+      bookings_missing_cost,
+      by_variety
+    }, 'Chicks P&L report generated')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 
 export default router

@@ -67,13 +67,35 @@ router.delete('/varieties/:id', requireAuth, requireRole('super_admin', 'admin')
 router.get('/schedules', requireAuth, async (req, res) => {
   try {
     const { from, to } = req.query
-    let query = supabase.from('chick_delivery_schedules').select('*, chick_varieties(name)').order('delivery_date', { ascending: true })
+    const canSeeCost = ['super_admin', 'admin'].includes(req.user.role)
+
+    const selectFields = canSeeCost
+      ? '*, chick_varieties(name), stock_receipts(supplier_id, total_cost, amount_paid, suppliers(name))'
+      : 'id, variety_id, delivery_date, total_cartons_available, max_cartons_per_order, created_by, created_at, chick_varieties(name)'
+
+    let query = supabase.from('chick_delivery_schedules').select(selectFields).order('delivery_date', { ascending: true })
     if (from) query = query.gte('delivery_date', from)
     if (to) query = query.lte('delivery_date', to)
 
     const { data, error: dbError } = await query
     if (dbError) return error(res, 'Could not fetch schedules', 500)
-    return success(res, data, 'Schedules fetched')
+
+    if (!canSeeCost) return success(res, data, 'Schedules fetched')
+
+    const shaped = data.map(s => {
+      const receipt = s.stock_receipts
+      const { stock_receipts, ...rest } = s
+      return {
+        ...rest,
+        supplier_id: receipt?.supplier_id || null,
+        supplier_name: receipt?.suppliers?.name || null,
+        total_cost: receipt?.total_cost ?? null,
+        amount_paid: receipt?.amount_paid ?? null,
+        balance_owed: receipt ? Number(receipt.total_cost) - Number(receipt.amount_paid) : null
+      }
+    })
+
+    return success(res, shaped, 'Schedules fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
   }
@@ -81,14 +103,48 @@ router.get('/schedules', requireAuth, async (req, res) => {
 
 router.post('/schedules', requireAuth, requireRole('super_admin', 'admin'), async (req, res) => {
   try {
-    const { variety_id, delivery_date, total_cartons_available, max_cartons_per_order } = req.body
+    const { variety_id, delivery_date, total_cartons_available, max_cartons_per_order, supplier_id, cost_per_carton, amount_paid_now, payment_method_now } = req.body
     if (!variety_id || !delivery_date || !total_cartons_available || !max_cartons_per_order) {
       return error(res, 'variety_id, delivery_date, total_cartons_available and max_cartons_per_order are required')
     }
 
+    let stock_receipt_id = null
+
+    if (cost_per_carton !== undefined && cost_per_carton !== null) {
+      const total_cost = Number(cost_per_carton) * Number(total_cartons_available)
+      const amountPaid = amount_paid_now ? Number(amount_paid_now) : 0
+      const paymentStatus = amountPaid >= total_cost ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid')
+
+      const { data: receipt, error: receiptErr } = await supabase
+        .from('stock_receipts')
+        .insert({
+          branch_id: null,
+          supplier_id: supplier_id || null,
+          received_by: req.user.id,
+          total_cost,
+          notes: 'Chick delivery schedule cost',
+          amount_paid: amountPaid,
+          payment_status: paymentStatus
+        })
+        .select().single()
+
+      if (receiptErr) return error(res, 'Could not record schedule cost', 500)
+
+      if (amountPaid > 0) {
+        await supabase.from('stock_receipt_payments').insert({
+          stock_receipt_id: receipt.id, amount: amountPaid, payment_method: payment_method_now || 'cash', paid_by: req.user.id
+        })
+      }
+
+      stock_receipt_id = receipt.id
+    }
+
     const { data: schedule, error: dbError } = await supabase
       .from('chick_delivery_schedules')
-      .insert({ variety_id, delivery_date, total_cartons_available, max_cartons_per_order, created_by: req.user.id })
+      .insert({
+        variety_id, delivery_date, total_cartons_available, max_cartons_per_order,
+        created_by: req.user.id, cost_per_carton: cost_per_carton ?? null, stock_receipt_id
+      })
       .select().single()
 
     if (dbError) return error(res, 'Could not create schedule', 500)
