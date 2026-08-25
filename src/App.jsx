@@ -21,6 +21,9 @@ import CreditDebt from './pages/admin/CreditDebt'
 import Deposits from './pages/admin/Deposits'
 import CustomerDetail from './pages/admin/CustomerDetail'
 import SupplierDebt from './pages/admin/SupplierDebt'
+import Varieties from './pages/chicks/Varieties'
+import Schedules from './pages/chicks/Schedules'
+import Bookings from './pages/chicks/Bookings'
 import Expenses from './pages/admin/Expenses'
 import ReportsHub from './pages/admin/ReportsHub'
 import SalesReport from './pages/admin/reports/SalesReport'
@@ -126,22 +129,22 @@ function App() {
           <ProtectedRoute allowed={['super_admin']}><AdminPage><Staff /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/chicks/varieties" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage title="Chick Varieties" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage><Varieties /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/chicks/schedules" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage title="Delivery Schedules" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage><Schedules /></AdminPage></ProtectedRoute>
         } />
         <Route path="/admin/chicks/bookings" element={
-          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage title="Chick Bookings" /></ProtectedRoute>
+          <ProtectedRoute allowed={['super_admin', 'admin']} requireMainBranch><AdminPage><Bookings /></AdminPage></ProtectedRoute>
         } />
         <Route path="/cashier/chicks/varieties" element={
-          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage title="Chick Varieties" /></ProtectedRoute>
+          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage><Varieties /></CashierPage></ProtectedRoute>
         } />
         <Route path="/cashier/chicks/schedules" element={
-          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage title="Delivery Schedules" /></ProtectedRoute>
+          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage><Schedules /></CashierPage></ProtectedRoute>
         } />
         <Route path="/cashier/chicks/bookings" element={
-          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage title="Chick Bookings" /></ProtectedRoute>
+          <ProtectedRoute allowed={['cashier']} requireMainBranch><CashierPage><Bookings /></CashierPage></ProtectedRoute>
         } />
         <Route path="/admin/credit" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><CreditDebt /></AdminPage></ProtectedRoute>

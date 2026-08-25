@@ -8,7 +8,10 @@ const router = express.Router()
 
 router.get('/varieties', requireAuth, async (req, res) => {
   try {
-    const { data, error: dbError } = await supabase.from('chick_varieties').select('*').eq('is_active', true).order('name', { ascending: true })
+    const includeInactive = req.query.include_inactive === 'true' && ['super_admin', 'admin'].includes(req.user.role)
+    let query = supabase.from('chick_varieties').select('*').order('name', { ascending: true })
+    if (!includeInactive) query = query.eq('is_active', true)
+    const { data, error: dbError } = await query
     if (dbError) return error(res, 'Could not fetch varieties', 500)
     return success(res, data, 'Varieties fetched')
   } catch (err) {
@@ -160,8 +163,9 @@ router.get('/bookings', requireAuth, requireRole('super_admin', 'admin', 'cashie
 
 router.post('/bookings', requireAuth, async (req, res) => {
   try {
-    const { customer_id, payment_method, items } = req.body
+    const { customer_id, payment_method, items, deposit_amount_used } = req.body
     const finalCustomerId = req.user.role === 'customer' ? req.user.id : customer_id
+    const branch_id = req.user.role === 'customer' ? null : (req.user.branch_id || null)
 
     if (!finalCustomerId) return error(res, 'customer_id is required')
     if (!payment_method) return error(res, 'payment_method is required')
@@ -208,15 +212,28 @@ router.post('/bookings', requireAuth, async (req, res) => {
       creditAccount = account
     }
 
+    let depositAccount = null
+    if (payment_method === 'deposit') {
+      if (!deposit_amount_used || deposit_amount_used <= 0) return error(res, 'deposit_amount_used is required for deposit payment')
+      if (Number(deposit_amount_used) < total_amount) return error(res, 'Deposit payment currently requires the deposit to cover the full booking total')
+
+      const { data: account } = await supabase.from('deposit_accounts').select('*').eq('customer_id', finalCustomerId).maybeSingle()
+      if (!account) return error(res, 'Customer has no deposit account')
+      if (Number(account.current_balance) < total_amount) return error(res, "Amount exceeds the customer's deposit balance")
+      depositAccount = account
+    }
+
     const { data: booking, error: bookingErr } = await supabase
       .from('chick_bookings')
       .insert({
         customer_id: finalCustomerId,
+        branch_id,
         booking_code,
         qr_code: booking_code,
         total_amount,
         payment_method,
-        payment_status: payment_method === 'credit' ? 'paid' : 'pending',
+        deposit_amount_used: payment_method === 'deposit' ? total_amount : null,
+        payment_status: ['credit', 'deposit'].includes(payment_method) ? 'paid' : 'pending',
         booking_status: 'pending_approval'
       })
       .select().single()
@@ -234,6 +251,14 @@ router.post('/bookings', requireAuth, async (req, res) => {
       await supabase.from('credit_accounts').update({ current_balance: newBalance }).eq('id', creditAccount.id)
       await supabase.from('credit_transactions').insert({
         credit_account_id: creditAccount.id, type: 'debit', amount: total_amount, balance_after: newBalance
+      })
+    }
+
+    if (payment_method === 'deposit' && depositAccount) {
+      const newBalance = Number(depositAccount.current_balance) - total_amount
+      await supabase.from('deposit_accounts').update({ current_balance: newBalance }).eq('id', depositAccount.id)
+      await supabase.from('deposit_transactions').insert({
+        deposit_account_id: depositAccount.id, type: 'deposit_out', amount: total_amount, balance_after: newBalance, note: 'Chick booking payment'
       })
     }
 
@@ -394,13 +419,32 @@ router.put('/bookings/:id/collect', requireAuth, requireRole('super_admin', 'adm
     }
 
     const { data: updated, error: dbError } = await supabase
-      .from('chick_bookings')
-      .update({ booking_status: 'collected', payment_status: 'paid', collected_at: new Date(), collected_by: req.user.id })
+        .from('chick_bookings')
+        .update({
+        booking_status: 'collected', payment_status: 'paid', collected_at: new Date(), collected_by: req.user.id,
+        branch_id: booking.branch_id || req.user.branch_id || null
+      })
       .eq('id', id).select().single()
 
     if (dbError) return error(res, 'Could not mark booking as collected', 500)
     await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'collect', entity_type: 'chick_booking', entity_id: id, old_value: booking, new_value: updated })
     return success(res, updated, 'Booking collected')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+router.get('/bookings/mine', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'customer') return error(res, 'This endpoint is for customer accounts only', 403)
+
+    const { data, error: dbError } = await supabase
+      .from('chick_bookings')
+      .select('*, chick_booking_items(*, chick_varieties(name))')
+      .eq('customer_id', req.user.id)
+      .order('created_at', { ascending: false })
+
+    if (dbError) return error(res, 'Could not fetch bookings', 500)
+    return success(res, data, 'Your bookings fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
   }
