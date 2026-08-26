@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, Bird, X, UserPlus, User, Eye, Check, XCircle, Package, QrCode, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
+import QRCodeLib from 'qrcode'
+import { Html5Qrcode } from 'html5-qrcode'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
 
@@ -84,7 +86,10 @@ function Bookings() {
       const parts = []
       if (i.cartons > 0) parts.push(`${i.cartons} carton${i.cartons > 1 ? 's' : ''}`)
       if (i.pieces > 0) parts.push(`${i.pieces} pc`)
-      return `${i.chick_varieties?.name || 'Variety'} (${parts.join(', ')})`
+      const date = i.chick_delivery_schedules?.delivery_date
+        ? ` — ${new Date(i.chick_delivery_schedules.delivery_date).toLocaleDateString('en-NG', { dateStyle: 'short' })}`
+        : ''
+      return `${i.chick_varieties?.name || 'Variety'} (${parts.join(', ')})${date}`
     }).join('; ')
   }
 
@@ -508,15 +513,43 @@ function NewBookingModal({ onClose, onCreated }) {
 // ---------- Lookup by code / QR ----------
 
 function LookupModal({ onClose, onFound }) {
+  const [mode, setMode] = useState('scan') // 'scan' | 'type'
   const [code, setCode] = useState('')
   const [searching, setSearching] = useState(false)
+  const [cameraError, setCameraError] = useState(false)
 
-  const handleSearch = async (e) => {
-    e.preventDefault()
-    if (!code.trim()) return
+  useEffect(() => {
+    if (mode !== 'scan') return
+    let scanner
+    let handled = false
+
+    scanner = new Html5Qrcode('qr-reader')
+    scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: 240 },
+      async (decodedText) => {
+        if (handled) return
+        handled = true
+        try { await scanner.stop() } catch { /* already stopped */ }
+        resolveBooking(decodedText, true)
+      },
+      () => { /* per-frame scan miss — ignore, keep scanning */ }
+    ).catch(() => {
+      setCameraError(true)
+    })
+
+    return () => {
+      handled = true
+      scanner?.stop().catch(() => { /* already stopped or never started */ })
+    }
+  }, [mode])
+
+  const resolveBooking = async (value, viaScan) => {
     setSearching(true)
     try {
-      const res = await api.get(`/api/chicks/bookings/code/${code.trim()}`)
+      const res = viaScan
+        ? await api.post('/api/chicks/bookings/scan-qr', { qr_code: value })
+        : await api.get(`/api/chicks/bookings/code/${value}`)
       const booking = res.data.data || res.data
       onFound(booking.id)
     } catch (err) {
@@ -526,6 +559,12 @@ function LookupModal({ onClose, onFound }) {
     }
   }
 
+  const handleManualSubmit = (e) => {
+    e.preventDefault()
+    if (!code.trim()) return
+    resolveBooking(code.trim(), false)
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -533,21 +572,56 @@ function LookupModal({ onClose, onFound }) {
           <h2 className="text-lg font-bold text-gray-800">Lookup Booking</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
-        <form onSubmit={handleSearch} className="space-y-4">
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="e.g. CHK-AB12CD34"
-            autoFocus
-            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-          />
-          <p className="text-xs text-gray-400">
-            Type the code from a printed receipt, or manually enter what a QR scanner reads.
-          </p>
-          <button type="submit" disabled={searching} className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60">
-            {searching ? 'Looking up...' : 'Find Booking'}
+
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => { setMode('scan'); setCameraError(false) }}
+            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition ${mode === 'scan' ? 'bg-green-600 text-white' : 'bg-gray-50 text-gray-600'}`}
+          >
+            Scan QR
           </button>
-        </form>
+          <button
+            onClick={() => setMode('type')}
+            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition ${mode === 'type' ? 'bg-green-600 text-white' : 'bg-gray-50 text-gray-600'}`}
+          >
+            Enter Code
+          </button>
+        </div>
+
+        {mode === 'scan' ? (
+          cameraError ? (
+            <div className="text-center py-6">
+              <p className="text-sm text-red-500 mb-2">Couldn't access a camera on this device.</p>
+              <button onClick={() => setMode('type')} className="text-xs font-semibold text-green-600 hover:text-green-700">
+                Enter the code manually instead
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div id="qr-reader" className="rounded-xl overflow-hidden min-h-[250px]" />
+              {searching && (
+                <p className="text-xs text-green-600 mt-2 text-center">Found it — loading booking...</p>
+              )}
+              <p className="text-xs text-gray-400 mt-2 text-center">Point the camera at the booking's QR code</p>
+            </div>
+          )
+        ) : (
+          <form onSubmit={handleManualSubmit} className="space-y-4">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="e.g. CHK-AB12CD34"
+              autoFocus
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+            <p className="text-xs text-gray-400">
+              Type the code from a printed receipt.
+            </p>
+            <button type="submit" disabled={searching} className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60">
+              {searching ? 'Looking up...' : 'Find Booking'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   )
@@ -595,10 +669,11 @@ function BookingDetailModal({ bookingId, onClose, onChanged }) {
     try {
       const res = await api.get(`/api/chicks/bookings/${bookingId}/receipt`)
       const r = res.data.data || res.data
+      const qrDataUrl = await QRCodeLib.toDataURL(r.booking_code, { width: 160, margin: 1 })
       const win = window.open('', '_blank')
       win.document.write(`
         <html><head><title>Booking Receipt ${r.booking_code}</title>
-        <style>body{font-family:monospace;padding:20px;max-width:320px} h2{text-align:center} .line{display:flex;justify-content:space-between;margin:4px 0} hr{border:none;border-top:1px dashed #999}</style>
+        <style>body{font-family:monospace;padding:20px;max-width:320px} h2{text-align:center} .line{display:flex;justify-content:space-between;margin:4px 0} hr{border:none;border-top:1px dashed #999} .qr{text-align:center;margin:16px 0}</style>
         </head><body>
         <h2>Sadeeq Agrovet</h2>
         <p style="text-align:center">Chick Booking Receipt</p>
@@ -611,6 +686,8 @@ function BookingDetailModal({ bookingId, onClose, onChanged }) {
         ${(r.items || []).map((i) => `<div class="line"><span>${i.chick_varieties?.name || 'Variety'}</span><span>${i.cartons || 0} ctn / ${i.pieces || 0} pc</span></div>`).join('')}
         <hr/>
         <div class="line"><strong>Total</strong><strong>₦${Number(r.total_amount || 0).toLocaleString()}</strong></div>
+        <div class="qr"><img src="${qrDataUrl}" width="160" height="160" /></div>
+        <p style="text-align:center;font-size:10px">Scan at collection</p>
         ${r.users?.name ? `<p style="margin-top:10px;font-size:11px">Approved by: ${r.users.name}</p>` : ''}
         </body></html>
       `)
@@ -650,7 +727,14 @@ function BookingDetailModal({ bookingId, onClose, onChanged }) {
               <div className="space-y-1.5">
                 {(booking.items || []).map((i, idx) => (
                   <div key={idx} className="flex justify-between text-sm">
-                    <span className="text-gray-600">{i.chick_varieties?.name}</span>
+                    <div>
+                      <span className="text-gray-600">{i.chick_varieties?.name}</span>
+                      {i.chick_delivery_schedules?.delivery_date && (
+                        <span className="text-xs text-gray-400 block">
+                          Delivery: {new Date(i.chick_delivery_schedules.delivery_date).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-gray-800">{i.cartons || 0} carton(s), {i.pieces || 0} pc</span>
                   </div>
                 ))}

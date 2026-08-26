@@ -11,6 +11,11 @@ import Branches from './pages/admin/Branches'
 import Suppliers from './pages/admin/Suppliers'
 import Staff from './pages/admin/Staff'
 import useAuthStore from './store/authStore'
+import CustomerLogin from './pages/customer/Login'
+import CustomerRegister from './pages/customer/Register'
+import CustomerLayout from './pages/customer/CustomerLayout'
+import BookChicks from './pages/customer/BookChicks'
+import MyBookings from './pages/customer/MyBookings'
 import useBranchStore from './store/branchStore'
 import Stock from './pages/admin/Stock'
 import SalesHistory from './pages/admin/SalesHistory'
@@ -61,7 +66,13 @@ function CashierPage({ children, title }) {
     </CashierLayout>
   )
 }
-
+function CustomerPortalPage({ children, title }) {
+  return (
+    <CustomerLayout>
+      {children || <ComingSoon title={title} />}
+    </CustomerLayout>
+  )
+}
 // Guards a route by role. `allowed` is an array of roles permitted here.
 // Not logged in -> /login. Logged in but wrong role -> their own dashboard.
 function ProtectedRoute({ allowed, requireMainBranch, children }) {
@@ -72,7 +83,11 @@ function ProtectedRoute({ allowed, requireMainBranch, children }) {
     return <Navigate to="/login" replace />
   }
 
-  const fallback = user?.role === 'cashier' ? '/cashier/dashboard' : '/admin/dashboard'
+  const fallback = user?.role === 'cashier'
+    ? '/cashier/dashboard'
+    : user?.role === 'customer'
+      ? '/customer/dashboard'
+      : '/admin/dashboard'
 
   if (!allowed.includes(user?.role)) {
     return <Navigate to={fallback} replace />
@@ -105,7 +120,15 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/customer/login" element={<ComingSoon title="Customer Login" />} />
+        <Route path="/customer/login" element={<CustomerLogin />} />
+        <Route path="/customer/register" element={<CustomerRegister />} />
+
+        <Route path="/customer/dashboard" element={
+          <ProtectedRoute allowed={['customer']}><CustomerPortalPage><BookChicks /></CustomerPortalPage></ProtectedRoute>
+        } />
+        <Route path="/customer/bookings" element={
+          <ProtectedRoute allowed={['customer']}><CustomerPortalPage><MyBookings /></CustomerPortalPage></ProtectedRoute>
+        } />
 
         {/* Admin + Super Admin Routes */}
         <Route path="/admin/dashboard" element={

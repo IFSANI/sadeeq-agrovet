@@ -58,8 +58,8 @@ function Login() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-green-600 rounded-2xl mb-4 shadow-lg">
             <span className="text-white text-2xl font-bold">SA</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">Sadeeq Agrovet</h1>
-          <p className="text-gray-500 text-sm mt-1">and General Merchant</p>
+          <h1 className="text-2xl font-bold text-gray-800">SADEEQ AGROVET</h1>
+          <p className="text-gray-500 text-sm mt-1">AND GENERAL MERCHANT</p>
         </div>
 
         {/* Card */}

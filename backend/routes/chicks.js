@@ -203,7 +203,7 @@ router.get('/bookings', requireAuth, requireRole('super_admin', 'admin', 'cashie
     const { status, customer } = req.query
     let query = supabase
       .from('chick_bookings')
-      .select('*, customers(name, phone), chick_booking_items(*, chick_varieties(name)))')
+      .select('*, customers(name, phone), chick_booking_items(*, chick_varieties(name), chick_delivery_schedules(delivery_date)))')
       .order('created_at', { ascending: false })
 
     if (status) query = query.eq('booking_status', status)
@@ -328,7 +328,7 @@ router.get('/bookings/code/:bookingCode', requireAuth, async (req, res) => {
   try {
     const { data, error: dbError } = await supabase
       .from('chick_bookings')
-      .select('*, customers(name, phone), chick_booking_items(*, chick_varieties(name)))')
+      .select('*, customers(name, phone), chick_booking_items(*, chick_varieties(name), chick_delivery_schedules(delivery_date)))')
       .eq('booking_code', req.params.bookingCode).single()
 
     if (dbError || !data) return error(res, 'Booking not found', 404)
@@ -346,7 +346,7 @@ router.post('/bookings/scan-qr', requireAuth, requireRole('super_admin', 'admin'
 
     const { data, error: dbError } = await supabase
       .from('chick_bookings')
-      .select('*, customers(name, phone), chick_booking_items(*, chick_varieties(name)))')
+      .select('*, customers(name, phone), chick_booking_items(*, chick_varieties(name), chick_delivery_schedules(delivery_date)))')
       .eq('qr_code', qr_code).single()
 
     if (dbError || !data) return error(res, 'No booking found for this QR code', 404)
@@ -360,7 +360,7 @@ router.get('/bookings/:id/receipt', requireAuth, async (req, res) => {
   try {
     const { data, error: dbError } = await supabase
       .from('chick_bookings')
-      .select('*, customers(name, phone), users:approved_by(name), chick_booking_items(*, chick_varieties(name)))')
+      .select('*, customers(name, phone), users:approved_by(name), chick_booking_items(*, chick_varieties(name), chick_delivery_schedules(delivery_date)))')
       .eq('id', req.params.id).single()
 
     if (dbError || !data) return error(res, 'Booking not found', 404)
@@ -377,7 +377,7 @@ router.get('/bookings/:id', requireAuth, async (req, res) => {
   try {
     const { data, error: dbError } = await supabase
       .from('chick_bookings')
-      .select('*, customers(name, phone), chick_booking_items(*, chick_varieties(name)))')
+      .select('*, customers(name, phone), chick_booking_items(*, chick_varieties(name), chick_delivery_schedules(delivery_date)))')
       .eq('id', req.params.id).single()
 
     if (dbError || !data) return error(res, 'Booking not found', 404)
@@ -495,7 +495,7 @@ router.get('/bookings/mine', requireAuth, async (req, res) => {
 
     const { data, error: dbError } = await supabase
       .from('chick_bookings')
-      .select('*, chick_booking_items(*, chick_varieties(name))')
+      .select('*, chick_booking_items(*, chick_varieties(name), chick_delivery_schedules(delivery_date))')
       .eq('customer_id', req.user.id)
       .order('created_at', { ascending: false })
 

@@ -36,27 +36,40 @@ router.post('/customer/register', async (req, res) => {
     if (!name || !phone || !password) return error(res, 'Name, phone and password are required')
     if (password.length < 6) return error(res, 'Password must be at least 6 characters')
 
-    const { data: existing } = await supabase.from('customers').select('id').eq('phone', phone).maybeSingle()
-    if (existing) return error(res, 'An account with this phone number already exists')
-
+    const { data: existing } = await supabase.from('customers').select('*').eq('phone', phone).maybeSingle()
     const hashedPassword = await bcrypt.hash(password, 10)
-    const { data: customer, error: dbError } = await supabase
-      .from('customers').insert({ name, phone, email: email || null, password: hashedPassword, address: address || null })
-      .select().single()
 
-    if (dbError) return error(res, 'Could not create account', 500)
+    let customer
+    if (existing) {
+      if (existing.password) {
+        return error(res, 'An account with this phone number already exists. Please log in instead.')
+      }
+      const { data: linked, error: dbError } = await supabase
+        .from('customers')
+        .update({ password: hashedPassword, name: name || existing.name, email: email || existing.email, address: address || existing.address })
+        .eq('id', existing.id)
+        .select().single()
+      if (dbError) return error(res, 'Could not link account', 500)
+      customer = linked
+    } else {
+      const { data: created, error: dbError } = await supabase
+        .from('customers')
+        .insert({ name, phone, email: email || null, password: hashedPassword, address: address || null })
+        .select().single()
+      if (dbError) return error(res, 'Could not create account', 500)
+      customer = created
+    }
 
     const token = jwt.sign({ id: customer.id, role: 'customer' }, process.env.JWT_SECRET, { expiresIn: '30d' })
 
     return success(res, {
       token,
-      customer: { id: customer.id, name: customer.name, phone: customer.phone, email: customer.email }
-    }, 'Registration successful')
+      user: { id: customer.id, name: customer.name, phone: customer.phone, email: customer.email, role: 'customer' }
+    }, existing ? 'Account linked, login successful' : 'Registration successful')
   } catch (err) {
     return error(res, 'Server error', 500)
   }
 })
-
 router.post('/customer/login', async (req, res) => {
   try {
     const { phone, password } = req.body
@@ -72,11 +85,12 @@ router.post('/customer/login', async (req, res) => {
 
     return success(res, {
       token,
-      customer: { id: customer.id, name: customer.name, phone: customer.phone, email: customer.email }
+      user: { id: customer.id, name: customer.name, phone: customer.phone, email: customer.email, role: 'customer' }
     }, 'Login successful')
   } catch (err) {
-    return error(res, "Server error", 500)
+    return error(res, 'Server error', 500)
   }
 })
+    
 
 export default router
