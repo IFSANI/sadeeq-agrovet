@@ -16,10 +16,16 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isAuthAttempt = error.config?.url?.includes('/api/auth/')
+
+    // Don't hijack a failed login/register attempt — let the page's own
+    // error handling show the real message (wrong password, duplicate
+    // phone, etc.) instead of yanking the browser away mid-attempt.
+    if (error.response?.status === 401 && !isAuthAttempt) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      const onCustomerSide = window.location.pathname.startsWith('/customer')
+      window.location.href = onCustomerSide ? '/customer/login' : '/login'
     }
     return Promise.reject(error)
   }

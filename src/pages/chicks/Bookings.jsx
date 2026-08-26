@@ -520,17 +520,24 @@ function LookupModal({ onClose, onFound }) {
 
   useEffect(() => {
     if (mode !== 'scan') return
-    let scanner
+    const scanner = new Html5Qrcode('qr-reader')
     let handled = false
+    let stopped = false
 
-    scanner = new Html5Qrcode('qr-reader')
+    const stopScanner = async () => {
+      if (stopped) return
+      stopped = true
+      try { await scanner.stop() } catch { /* wasn't running */ }
+      try { await scanner.clear() } catch { /* already cleared */ }
+    }
+
     scanner.start(
       { facingMode: 'environment' },
       { fps: 10, qrbox: 240 },
       async (decodedText) => {
         if (handled) return
         handled = true
-        try { await scanner.stop() } catch { /* already stopped */ }
+        await stopScanner()
         resolveBooking(decodedText, true)
       },
       () => { /* per-frame scan miss — ignore, keep scanning */ }
@@ -538,10 +545,7 @@ function LookupModal({ onClose, onFound }) {
       setCameraError(true)
     })
 
-    return () => {
-      handled = true
-      scanner?.stop().catch(() => { /* already stopped or never started */ })
-    }
+    return () => { stopScanner() }
   }, [mode])
 
   const resolveBooking = async (value, viaScan) => {

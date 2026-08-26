@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Bird } from 'lucide-react'
+import { Bird, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
+import QRCodeLib from 'qrcode'
 import api from '../../services/api'
 
 const statusColor = (status) => {
@@ -29,6 +30,19 @@ function MyBookings() {
 
   useEffect(() => { fetchBookings() }, [])
 
+    const downloadQR = async (bookingCode) => {
+    try {
+      const dataUrl = await QRCodeLib.toDataURL(bookingCode, { width: 400, margin: 2 })
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = `booking-${bookingCode}.png`
+      link.click()
+    } catch {
+      toast.error('Failed to generate QR image')
+    }
+  }
+
+  
   const handleCancel = async (id) => {
     if (!confirm('Cancel this booking?')) return
     setCancellingId(id)
@@ -99,15 +113,25 @@ function MyBookings() {
                     ({b.payment_status})
                   </span>
                 </div>
-                {['pending_approval', 'confirmed'].includes(b.booking_status) && (
-                  <button
-                    onClick={() => handleCancel(b.id)}
-                    disabled={cancellingId === b.id}
-                    className="text-xs font-semibold text-red-500 hover:text-red-600 disabled:opacity-50"
-                  >
-                    {cancellingId === b.id ? 'Cancelling...' : 'Cancel Booking'}
-                  </button>
-                )}
+                <div className="flex items-center gap-3">
+                  {b.booking_status !== 'cancelled' && (
+                    <button
+                      onClick={() => downloadQR(b.booking_code)}
+                      className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700"
+                    >
+                      <Download size={13} /> QR
+                    </button>
+                  )}
+                  {['pending_approval', 'confirmed'].includes(b.booking_status) && (
+                    <button
+                      onClick={() => handleCancel(b.id)}
+                      disabled={cancellingId === b.id}
+                      className="text-xs font-semibold text-red-500 hover:text-red-600 disabled:opacity-50"
+                    >
+                      {cancellingId === b.id ? 'Cancelling...' : 'Cancel Booking'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}

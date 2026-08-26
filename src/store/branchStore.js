@@ -1,20 +1,29 @@
 import { create } from 'zustand'
 import api from '../services/api'
 
+const cachedBranches = (() => {
+  try {
+    return JSON.parse(localStorage.getItem('branches_cache')) || []
+  } catch {
+    return []
+  }
+})()
+
 const useBranchStore = create((set, get) => ({
-  branches: [],
-  loaded: false,
+  branches: cachedBranches,
+  loaded: cachedBranches.length > 0,
 
   fetchBranches: async () => {
     try {
       const res = await api.get('/api/branches')
       if (res.data.success) {
+        localStorage.setItem('branches_cache', JSON.stringify(res.data.data))
         set({ branches: res.data.data, loaded: true })
       }
     } catch {
-      // Silently fail — guards below default to "not main branch" if the
-      // list hasn't loaded, which is the safe direction (locks a feature
-      // out rather than accidentally exposing it).
+      // Couldn't refresh — keep whatever's cached, but still mark loaded
+      // so a guard waiting on this doesn't spin forever.
+      set({ loaded: true })
     }
   },
 

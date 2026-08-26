@@ -78,6 +78,7 @@ function CustomerPortalPage({ children, title }) {
 function ProtectedRoute({ allowed, requireMainBranch, children }) {
   const { user, isAuthenticated, defaultBranchId } = useAuthStore()
   const isMainBranchUser = useBranchStore((state) => state.isMainBranchUser)
+  const branchesLoaded = useBranchStore((state) => state.loaded)
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
@@ -93,8 +94,17 @@ function ProtectedRoute({ allowed, requireMainBranch, children }) {
     return <Navigate to={fallback} replace />
   }
 
-  if (requireMainBranch && !isMainBranchUser(user, defaultBranchId)) {
-    return <Navigate to={fallback} replace />
+  if (requireMainBranch) {
+    if (!branchesLoaded) {
+      return (
+        <div className="h-screen flex items-center justify-center">
+          <span className="w-8 h-8 border-4 border-green-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )
+    }
+    if (!isMainBranchUser(user, defaultBranchId)) {
+      return <Navigate to={fallback} replace />
+    }
   }
 
   return children
@@ -103,6 +113,7 @@ function ProtectedRoute({ allowed, requireMainBranch, children }) {
 function App() {
   const loadFromStorage = useAuthStore((state) => state.loadFromStorage)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const userRole = useAuthStore((state) => state.user?.role)
   const fetchBranches = useBranchStore((state) => state.fetchBranches)
 
   useEffect(() => {
@@ -110,10 +121,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // Branches are a staff/business concept — customers have no branch_id
+    // and /api/branches rejects their token, which was silently logging
+    // every customer back out immediately after they signed in.
+    if (isAuthenticated && userRole !== 'customer') {
       fetchBranches()
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, userRole])
 
   return (
     <BrowserRouter>

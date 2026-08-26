@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Bird, Plus, X, Calendar } from 'lucide-react'
+import { Bird, Plus, X, Calendar, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
+import QRCodeLib from 'qrcode'
 import api from '../../services/api'
 
 function BookChicks() {
@@ -153,6 +154,18 @@ function BookingModal({ schedule, variety, onClose }) {
     }
   }
 
+  const downloadQR = async (bookingCode) => {
+    try {
+      const dataUrl = await QRCodeLib.toDataURL(bookingCode, { width: 400, margin: 2 })
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = `booking-${bookingCode}.png`
+      link.click()
+    } catch {
+      toast.error('Failed to generate QR image')
+    }
+  }
+
   if (done) {
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
@@ -174,6 +187,16 @@ function BookingModal({ schedule, variety, onClose }) {
               <p className="mt-2 text-xs">Your booking will be confirmed once the store verifies your transfer.</p>
             </div>
           )}
+          <button
+            onClick={() => downloadQR(done.booking_code)}
+            className="w-full flex items-center justify-center gap-2 border border-green-200 text-green-700 hover:bg-green-50 py-2.5 rounded-xl text-sm font-semibold transition mb-2"
+          >
+            <Download size={16} />
+            Download QR Code
+          </button>
+          <p className="text-xs text-gray-400 mb-3">
+            Save this image — show it at pickup, even without internet.
+          </p>
           <button
             onClick={onClose}
             className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition"
