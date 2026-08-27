@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Bird, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
-import QRCodeLib from 'qrcode'
 import api from '../../services/api'
+import { downloadBookingImage } from '../../utils/downloadBookingImage'
 
 const statusColor = (status) => {
   if (status === 'confirmed') return 'bg-blue-50 text-blue-600'
@@ -30,15 +30,11 @@ function MyBookings() {
 
   useEffect(() => { fetchBookings() }, [])
 
-    const downloadQR = async (bookingCode) => {
+  const handleDownload = async (booking) => {
     try {
-      const dataUrl = await QRCodeLib.toDataURL(bookingCode, { width: 400, margin: 2 })
-      const link = document.createElement('a')
-      link.href = dataUrl
-      link.download = `booking-${bookingCode}.png`
-      link.click()
+      await downloadBookingImage(booking)
     } catch {
-      toast.error('Failed to generate QR image')
+      toast.error('Failed to generate booking image')
     }
   }
 
@@ -116,10 +112,10 @@ function MyBookings() {
                 <div className="flex items-center gap-3">
                   {b.booking_status !== 'cancelled' && (
                     <button
-                      onClick={() => downloadQR(b.booking_code)}
+                      onClick={() => handleDownload(b)}
                       className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700"
                     >
-                      <Download size={13} /> QR
+                      <Download size={13} /> Image
                     </button>
                   )}
                   {['pending_approval', 'confirmed'].includes(b.booking_status) && (
