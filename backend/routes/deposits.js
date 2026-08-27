@@ -48,9 +48,14 @@ router.post('/:id/deposit/add', requireRole('super_admin', 'admin', 'cashier'), 
     return error(res, 'Server error', 500)
   }
 })
-router.get('/:id/deposit/transactions', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
+router.get('/:id/deposit/transactions', async (req, res) => {
   try {
     const { id: customer_id } = req.params
+
+    const isSelf = req.user.role === 'customer' && req.user.id === customer_id
+    const isStaff = ['super_admin', 'admin', 'cashier'].includes(req.user.role)
+    if (!isSelf && !isStaff) return error(res, 'Unauthorized', 403)
+
     const { data: account } = await supabase.from('deposit_accounts').select('id').eq('customer_id', customer_id).maybeSingle()
     if (!account) return success(res, [], 'No deposit account exists yet')
 
