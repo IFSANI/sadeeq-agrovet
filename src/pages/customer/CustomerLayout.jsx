@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Receipt, LogOut, Menu, X, Bird } from 'lucide-react'
+import { Receipt, LogOut, Menu, X, Bird, Wallet } from 'lucide-react'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
 
 const navItems = [
   { label: 'Book Chicks', icon: Bird, path: '/customer/dashboard' },
   { label: 'My Bookings', icon: Receipt, path: '/customer/bookings' },
+  { label: 'My Balance', icon: Wallet, path: '/customer/balance' },
 ]
 
 function CustomerLayout({ children }) {

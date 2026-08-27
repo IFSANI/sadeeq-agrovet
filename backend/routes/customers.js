@@ -156,5 +156,20 @@ router.put('/:id/reset-password', requireRole('super_admin', 'admin'), async (re
     return error(res, 'Server error', 500)
   }
 })
+router.get('/me', async (req, res) => {
+  try {
+    if (req.user.role !== 'customer') return error(res, 'This endpoint is for customer accounts only', 403)
+
+    const { data, error: dbError } = await supabase
+      .from('customers')
+      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status), deposit_account:deposit_accounts(id, current_balance)')
+      .eq('id', req.user.id).single()
+
+    if (dbError || !data) return error(res, 'Customer not found', 404)
+    return success(res, data, 'Profile fetched')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 
 export default router
