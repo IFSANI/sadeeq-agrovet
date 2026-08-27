@@ -40,6 +40,7 @@ import SupplierDebtSummary from './pages/admin/reports/SupplierDebtSummary'
 import CustomerReport from './pages/admin/reports/CustomerReport'
 import ChicksProfitLoss from './pages/admin/reports/ChicksProfitLoss'
 import Balance from './pages/customer/Balance'
+import ProfileEdit from './pages/customer/ProfileEdit'
 
 function ComingSoon({ title }) {
   return (
@@ -152,6 +153,9 @@ function App() {
         } />
                 <Route path="/customer/balance" element={
           <ProtectedRoute allowed={['customer']}><CustomerPortalPage><Balance /></CustomerPortalPage></ProtectedRoute>
+        } />
+        <Route path="/customer/profile" element={
+          <ProtectedRoute allowed={['customer']}><CustomerPortalPage><ProfileEdit /></CustomerPortalPage></ProtectedRoute>
         } />
 
         {/* Admin + Super Admin Routes */}

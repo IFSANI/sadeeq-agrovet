@@ -44,6 +44,14 @@ const useAuthStore = create((set) => ({
     localStorage.setItem('defaultBranchId', branchId)
     set({ defaultBranchId: branchId })
   },
+
+  updateUser: (updates) => {
+    set((state) => {
+      const merged = { ...state.user, ...updates }
+      localStorage.setItem('user', JSON.stringify(merged))
+      return { user: merged }
+    })
+  },
 }))
 
 export default useAuthStore

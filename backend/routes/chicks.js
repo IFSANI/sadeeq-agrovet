@@ -355,6 +355,22 @@ router.post('/bookings/scan-qr', requireAuth, requireRole('super_admin', 'admin'
     return error(res, 'Server error', 500)
   }
 })
+router.get('/bookings/mine', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'customer') return error(res, 'This endpoint is for customer accounts only', 403)
+
+    const { data, error: dbError } = await supabase
+      .from('chick_bookings')
+      .select('*, chick_booking_items(*, chick_varieties(name), chick_delivery_schedules(delivery_date))')
+      .eq('customer_id', req.user.id)
+      .order('created_at', { ascending: false })
+
+    if (dbError) return error(res, 'Could not fetch bookings', 500)
+    return success(res, data, 'Your bookings fetched')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 
 router.get('/bookings/:id/receipt', requireAuth, async (req, res) => {
   try {
@@ -489,21 +505,6 @@ router.put('/bookings/:id/collect', requireAuth, requireRole('super_admin', 'adm
     return error(res, 'Server error', 500)
   }
 })
-router.get('/bookings/mine', requireAuth, async (req, res) => {
-  try {
-    if (req.user.role !== 'customer') return error(res, 'This endpoint is for customer accounts only', 403)
 
-    const { data, error: dbError } = await supabase
-      .from('chick_bookings')
-      .select('*, chick_booking_items(*, chick_varieties(name), chick_delivery_schedules(delivery_date))')
-      .eq('customer_id', req.user.id)
-      .order('created_at', { ascending: false })
-
-    if (dbError) return error(res, 'Could not fetch bookings', 500)
-    return success(res, data, 'Your bookings fetched')
-  } catch (err) {
-    return error(res, 'Server error', 500)
-  }
-})
 
 export default router

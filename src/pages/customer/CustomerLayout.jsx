@@ -67,7 +67,10 @@ function CustomerLayout({ children }) {
         </nav>
 
         <div className="border-t border-gray-100 p-4">
-          <div className="flex items-center gap-3 mb-3">
+          <button
+            onClick={() => { navigate('/customer/profile'); setSidebarOpen(false) }}
+            className="flex items-center gap-3 mb-3 w-full text-left px-1 py-1 rounded-xl hover:bg-gray-50 transition"
+          >
             <div className="w-9 h-9 bg-green-100 rounded-xl flex items-center justify-center">
               <span className="text-green-700 text-sm font-bold">{user?.name?.charAt(0) || 'C'}</span>
             </div>
@@ -75,7 +78,7 @@ function CustomerLayout({ children }) {
               <p className="text-sm font-medium text-gray-800 truncate">{user?.name}</p>
               <p className="text-xs text-gray-400">{user?.phone}</p>
             </div>
-          </div>
+          </button>
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 text-sm text-red-500 hover:text-red-700 transition w-full px-3 py-2 rounded-xl hover:bg-red-50"

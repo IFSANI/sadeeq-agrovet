@@ -75,7 +75,54 @@ router.get('/me', async (req, res) => {
     return error(res, 'Server error', 500)
   }
 })
+router.put('/me', async (req, res) => {
+  try {
+    if (req.user.role !== 'customer') return error(res, 'This endpoint is for customer accounts only', 403)
 
+    const { name, email } = req.body
+    const updates = {}
+    if (name !== undefined) updates.name = name
+    if (email !== undefined) updates.email = email
+
+    if (Object.keys(updates).length === 0) return error(res, 'Nothing to update')
+
+    const { data: updated, error: dbError } = await supabase
+      .from('customers').update(updates).eq('id', req.user.id).select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at').single()
+
+    if (dbError) {
+      if (dbError.code === '23505') return error(res, 'This email is already in use')
+      return error(res, 'Could not update profile', 500)
+    }
+
+    return success(res, updated, 'Profile updated')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
+router.put('/me/password', async (req, res) => {
+  try {
+    if (req.user.role !== 'customer') return error(res, 'This endpoint is for customer accounts only', 403)
+
+    const { current_password, new_password } = req.body
+    if (!current_password || !new_password) return error(res, 'current_password and new_password are required')
+    if (new_password.length < 6) return error(res, 'New password must be at least 6 characters')
+
+    const { data: customer } = await supabase.from('customers').select('password').eq('id', req.user.id).single()
+    if (!customer || !customer.password) return error(res, 'Account not found', 404)
+
+    const match = await bcrypt.compare(current_password, customer.password)
+    if (!match) return error(res, 'Current password is incorrect')
+
+    const hashedPassword = await bcrypt.hash(new_password, 10)
+    const { error: dbError } = await supabase.from('customers').update({ password: hashedPassword }).eq('id', req.user.id)
+    if (dbError) return error(res, 'Could not update password', 500)
+
+    return success(res, {}, 'Password updated')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 router.get('/:id', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
   try {
     const { data, error: dbError } = await supabase
