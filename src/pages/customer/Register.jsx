@@ -32,7 +32,7 @@ function CustomerRegister() {
       if (form.email) payload.email = form.email
 
       const res = await api.post('/api/auth/customer/register', payload)
-      const { token, user } = res.data
+      const { token, user } = res.data.data
       login(user, token)
       toast.success(`Welcome, ${user.name}!`)
       navigate('/customer/dashboard')

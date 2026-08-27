@@ -20,7 +20,7 @@ function CustomerLogin() {
     setSaving(true)
     try {
       const res = await api.post('/api/auth/customer/login', { phone, password })
-      const { token, user } = res.data
+      const { token, user } = res.data.data
       login(user, token)
       toast.success(`Welcome back, ${user.name}!`)
       navigate('/customer/dashboard')

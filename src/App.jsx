@@ -66,6 +66,7 @@ function CashierPage({ children, title }) {
     </CashierLayout>
   )
 }
+
 function CustomerPortalPage({ children, title }) {
   return (
     <CustomerLayout>
@@ -73,6 +74,7 @@ function CustomerPortalPage({ children, title }) {
     </CustomerLayout>
   )
 }
+
 // Guards a route by role. `allowed` is an array of roles permitted here.
 // Not logged in -> /login. Logged in but wrong role -> their own dashboard.
 function ProtectedRoute({ allowed, requireMainBranch, children }) {
@@ -111,9 +113,13 @@ function ProtectedRoute({ allowed, requireMainBranch, children }) {
 }
 
 function App() {
-  const loadFromStorage = useAuthStore((state) => state.loadFromStorage)
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  const userRole = useAuthStore((state) => state.user?.role)
+  // Read isAuthenticated and user together from ONE subscription, not two
+  // separate selector hooks. Two independent useAuthStore(selector) calls
+  // can momentarily render out of sync with each other even when the
+  // underlying set() was atomic — that gap was letting fetchBranches()
+  // fire with isAuthenticated already true but userRole not yet resolved.
+  const { loadFromStorage, isAuthenticated, user } = useAuthStore()
+  const userRole = user?.role
   const fetchBranches = useBranchStore((state) => state.fetchBranches)
 
   useEffect(() => {
@@ -219,7 +225,7 @@ function App() {
         } />
         <Route path="/admin/reports/chicks-profit-loss" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><ChicksProfitLoss /></AdminPage></ProtectedRoute>
-        } />      
+        } />
         <Route path="/admin/settings" element={
           <ProtectedRoute allowed={['super_admin']}><AdminPage title="Settings" /></ProtectedRoute>
         } />
@@ -264,9 +270,7 @@ function App() {
         <Route path="/admin/supplier-debt" element={
           <ProtectedRoute allowed={['super_admin', 'admin']}><AdminPage><SupplierDebt /></AdminPage></ProtectedRoute>
         } />
-      </Routes>
-
-      
+      </Routes> 
     </BrowserRouter>
   )
 }
