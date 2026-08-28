@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    let { branch_id, customer_id, payment_method, items, offline_id, amount_paid_now, payment_method_now, deposit_amount_used } = req.body
+    let { branch_id, customer_id, payment_method, items, offline_id, amount_paid_now, payment_method_now, deposit_amount_used, days_to_settle } = req.body
 
     if (!branch_id) return error(res, 'branch_id is required')
     if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
@@ -113,22 +113,23 @@ router.post('/', async (req, res) => {
     }
 
     const { data: sale, error: saleErr } = await supabase
-      .from('sales')
-      .insert({
-        branch_id,
-        cashier_id: req.user.id,
-        customer_id: customer_id || null,
-        payment_method,
-        payment_method_now: ['split', 'deposit'].includes(payment_method) ? (payment_method_now || null) : null,
-        deposit_amount_used: payment_method === 'deposit' ? deposit_amount_used : null,
-        total_amount,
-        amount_paid: payment_method === 'credit' ? total_amount : (['split', 'deposit'].includes(payment_method) ? (amount_paid_now || null) : null),
-        payment_status: payment_method === 'credit' ? 'paid' : 'pending',
-        status: 'completed',
-        sale_type: 'regular',
-        offline_id: offline_id || null
-      })
-      .select().single()
+    .from('sales')
+    .insert({
+    branch_id,
+      cashier_id: req.user.id,
+      customer_id: customer_id || null,
+      payment_method,
+      payment_method_now: ['split', 'deposit'].includes(payment_method) ? (payment_method_now || null) : null,
+      deposit_amount_used: payment_method === 'deposit' ? deposit_amount_used : null,
+      days_to_settle: payment_method === 'credit' ? (days_to_settle ?? null) : null,
+      total_amount,
+      amount_paid: payment_method === 'credit' ? total_amount : (['split', 'deposit'].includes(payment_method) ? (amount_paid_now || null) : null),
+      payment_status: payment_method === 'credit' ? 'paid' : 'pending',
+      status: 'completed',
+      sale_type: 'regular',
+      offline_id: offline_id || null
+    })
+    .select().single()
 
     if (saleErr) {
       if (saleErr.code === '23505') return error(res, 'This sale was already recorded (duplicate offline_id)')
@@ -219,6 +220,55 @@ router.put('/:id/void', requireRole('super_admin', 'admin'), async (req, res) =>
 
     await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'void', entity_type: 'sale', entity_id: id, old_value: sale, new_value: updated })
     return success(res, updated, 'Sale voided, stock and credit restored')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+router.get('/credit-due', async (req, res) => {
+  try {
+    let { branch } = req.query
+    if (req.user.role !== 'super_admin') branch = req.user.branch_id
+
+    let query = supabase
+      .from('sales')
+      .select('id, branch_id, customer_id, total_amount, days_to_settle, created_at, customers(name, credit_accounts(current_balance)), branches(name)')
+      .eq('payment_method', 'credit')
+
+    if (branch) query = query.eq('branch_id', branch)
+
+    const { data, error: dbError } = await query
+    if (dbError) return error(res, 'Could not fetch overdue credit sales', 500)
+
+    const now = new Date()
+    const overdue = (data || []).filter(sale => {
+      const balance = sale.customers?.credit_accounts?.current_balance
+      if (!balance || Number(balance) <= 0) return false
+
+      const days = sale.days_to_settle || 0
+      const dueDate = new Date(sale.created_at)
+      dueDate.setDate(dueDate.getDate() + days)
+      return dueDate <= now
+    })
+
+    overdue.sort((a, b) => {
+      const dueA = new Date(a.created_at); dueA.setDate(dueA.getDate() + (a.days_to_settle || 0))
+      const dueB = new Date(b.created_at); dueB.setDate(dueB.getDate() + (b.days_to_settle || 0))
+      return dueA - dueB
+    })
+
+    const shaped = overdue.map(sale => ({
+      id: sale.id,
+      branch_id: sale.branch_id,
+      customer_id: sale.customer_id,
+      customer_name: sale.customers?.name || null,
+      total_amount: sale.total_amount,
+      days_to_settle: sale.days_to_settle,
+      created_at: sale.created_at,
+      current_balance: sale.customers?.credit_accounts?.current_balance ?? null,
+      branch_name: sale.branches?.name || null
+    }))
+
+    return success(res, shaped, 'Overdue credit sales fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
   }

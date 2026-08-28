@@ -9,6 +9,7 @@ function Deposits() {
   const [search, setSearch] = useState('')
   const [depositingCustomer, setDepositingCustomer] = useState(null) // null = closed, {} = open picker, {id,...} = prefilled
   const [showNewDeposit, setShowNewDeposit] = useState(false)
+  const [receiptData, setReceiptData] = useState(null)
 
   const fetchCustomers = async () => {
     setLoading(true)
@@ -140,10 +141,18 @@ function Deposits() {
         <RecordDepositModal
           customer={depositingCustomer}
           onClose={() => setDepositingCustomer(null)}
-          onSaved={() => {
+          onSaved={(receipt) => {
             setDepositingCustomer(null)
             fetchCustomers()
+            setReceiptData(receipt)
           }}
+        />
+      )}
+
+      {receiptData && (
+        <DepositReceiptModal
+          receipt={receiptData}
+          onClose={() => setReceiptData(null)}
         />
       )}
 
@@ -297,7 +306,15 @@ function RecordDepositModal({ customer, onClose, onSaved }) {
       const res = await api.post(`/api/customers/${customer.id}/deposit/add`, payload)
       if (res.data.success) {
         toast.success('Deposit recorded!')
-        onSaved()
+        onSaved({
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          amount: Number(amount),
+          paymentMethod,
+          reference,
+          newBalance: res.data.data?.deposit_account?.current_balance ?? res.data.data?.current_balance,
+          date: new Date(),
+        })
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to record deposit')
@@ -386,6 +403,93 @@ function RecordDepositModal({ customer, onClose, onSaved }) {
           </div>
 
         </form>
+      </div>
+    </div>
+  )
+}
+
+function DepositReceiptModal({ receipt, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .printable-receipt, .printable-receipt * { visibility: visible; }
+          .printable-receipt {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+          }
+          .no-print { display: none !important; }
+        }
+      `}</style>
+
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 printable-receipt">
+
+        <div className="flex items-center justify-between mb-5 no-print">
+          <h2 className="text-lg font-bold text-gray-800">Deposit Receipt</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="text-center border-b border-dashed border-gray-200 pb-4 mb-4">
+          <p className="text-lg font-bold text-gray-800">Deposit Receipt</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {receipt.date.toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}
+          </p>
+        </div>
+
+        <div className="space-y-2 text-sm mb-4">
+          <div className="flex justify-between">
+            <span className="text-gray-500">Customer</span>
+            <span className="font-medium text-gray-800">{receipt.customerName}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Phone</span>
+            <span className="font-medium text-gray-800">{receipt.customerPhone}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Received Via</span>
+            <span className="font-medium text-gray-800 capitalize">{receipt.paymentMethod}</span>
+          </div>
+          {receipt.reference && (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Reference</span>
+              <span className="font-medium text-gray-800">{receipt.reference}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-dashed border-gray-200 pt-4 mb-4">
+          <div className="flex justify-between items-center">
+            <span className="font-semibold text-gray-700">Amount Deposited</span>
+            <span className="text-xl font-bold text-green-600">₦{receipt.amount.toLocaleString()}</span>
+          </div>
+          {receipt.newBalance != null && (
+            <div className="flex justify-between items-center mt-2 text-sm">
+              <span className="text-gray-500">New Deposit Balance</span>
+              <span className="font-semibold text-gray-700">₦{Number(receipt.newBalance).toLocaleString()}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 no-print">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+          >
+            Close
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition"
+          >
+            Print Receipt
+          </button>
+        </div>
+
       </div>
     </div>
   )

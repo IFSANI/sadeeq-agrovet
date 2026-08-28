@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  ShoppingCart, AlertTriangle, Bird, Wallet, Receipt
+  ShoppingCart, AlertTriangle, Bird, Wallet, Receipt, Clock
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -31,6 +31,8 @@ function Dashboard() {
   const [lowStock, setLowStock] = useState([])
   const [pendingBookings, setPendingBookings] = useState(null) // null = feature not available here
   const [debt, setDebt] = useState({ total: 0, customerCount: 0 })
+  const [creditDue, setCreditDue] = useState([])
+  const [showAllCreditDue, setShowAllCreditDue] = useState(false)
 
   // Branch admin/cashier are pinned to their own branch. Super admin can
   // pick a branch or leave it blank for a company-wide view.
@@ -89,11 +91,16 @@ function Dashboard() {
       salesParams.branch = user?.branch_id
     }
 
-      const [salesRes, bookingsRes, customersRes, lowStockData] = await Promise.allSettled([
+      const creditDueParams = isSuperAdmin
+        ? (selectedBranch ? { branch: selectedBranch } : {})
+        : { branch: user?.branch_id }
+
+      const [salesRes, bookingsRes, customersRes, lowStockData, creditDueRes] = await Promise.allSettled([
         api.get('/api/sales', { params: salesParams }),
         api.get('/api/chicks/bookings', { params: { status: 'pending_approval' } }),
         api.get('/api/customers'),
         fetchLowStock(branches),
+        api.get('/api/sales/credit-due', { params: creditDueParams }),
       ])
 
       if (salesRes.status === 'fulfilled' && salesRes.value.data.success) {
@@ -123,6 +130,12 @@ function Dashboard() {
       }
 
       if (lowStockData.status === 'fulfilled') setLowStock(lowStockData.value)
+
+      if (creditDueRes.status === 'fulfilled' && creditDueRes.value.data.success) {
+        setCreditDue(creditDueRes.value.data.data)
+      } else {
+        setCreditDue([])
+      }
     } catch {
       toast.error('Failed to load dashboard data')
     } finally {
@@ -135,6 +148,7 @@ function Dashboard() {
   }, [])
 
   useEffect(() => {
+    setShowAllCreditDue(false)
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBranch, branches.length])
@@ -310,6 +324,53 @@ function Dashboard() {
               )}
             </div>
 
+          </div>
+
+          {/* Credit Repayments Due */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-700">Credit Repayments Due</h2>
+              <Clock size={16} className="text-orange-500" />
+            </div>
+            {creditDue.length === 0 ? (
+              <div className="py-12 text-center px-4">
+                <p className="text-sm text-gray-400">No overdue credit repayments right now</p>
+              </div>
+            ) : (
+              <>
+                <div className="divide-y divide-gray-50">
+                  {(showAllCreditDue ? creditDue : creditDue.slice(0, 5)).map((item, idx) => {
+                    const dueDate = new Date(item.created_at)
+                    dueDate.setDate(dueDate.getDate() + Number(item.days_to_settle || 0))
+                    const daysOverdue = Math.max(0, Math.floor((Date.now() - dueDate.getTime()) / 86400000))
+                    return (
+                      <div key={`${item.id || idx}`} className="flex items-center justify-between gap-3 px-5 py-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-700 truncate">{item.customer_name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {item.branch_name ? `${item.branch_name} · ` : ''}
+                            Owes ₦{Number(item.current_balance || 0).toLocaleString()} overall
+                          </p>
+                        </div>
+                        <span className="flex-shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-600">
+                          {daysOverdue === 0 ? 'Due today' : `${daysOverdue}d overdue`}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                {creditDue.length > 5 && (
+                  <div className="px-5 py-3 border-t border-gray-100 text-center">
+                    <button
+                      onClick={() => setShowAllCreditDue(!showAllCreditDue)}
+                      className="text-xs text-green-600 font-medium hover:underline"
+                    >
+                      {showAllCreditDue ? 'Show less' : `See more (${creditDue.length - 5} more)`}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </>
       )}

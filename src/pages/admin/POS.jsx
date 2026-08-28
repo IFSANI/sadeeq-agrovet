@@ -589,6 +589,7 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
   const [openingCredit, setOpeningCredit] = useState(false)
   const [amountPaidNow, setAmountPaidNow] = useState('')
   const [methodNow, setMethodNow] = useState('cash')
+  const [daysToSettle, setDaysToSettle] = useState('')
 
   const allMethods = ['Cash', 'Transfer', 'POS', 'Credit', 'Split', 'Deposit']
   const methods = online ? allMethods : ['Cash', 'Transfer', 'POS']
@@ -663,6 +664,12 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         return
       }
     }
+    if (method === 'Credit') {
+      if (!daysToSettle || Number(daysToSettle) <= 0) {
+        toast.error('Enter how many days the customer has to settle this credit')
+        return
+      }
+    }
     if (method === 'Deposit') {
       if (depositBalance < total) {
         toast.error(`Insufficient deposit balance. Customer has ₦${depositBalance.toLocaleString()}, sale total is ₦${total.toLocaleString()}.`)
@@ -691,6 +698,9 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
       if (method === 'Split') {
         salePayload.amount_paid_now = Number(amountPaidNow)
         salePayload.payment_method_now = methodNow
+      }
+      if (method === 'Credit') {
+        salePayload.days_to_settle = Number(daysToSettle)
       }
       if (method === 'Deposit') {
         salePayload.deposit_amount_used = total
@@ -868,9 +878,24 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         )}
 
         {method === 'Credit' && customer && creditAccount && (
-          <div className="mb-4 bg-orange-50 rounded-xl p-4 text-sm text-orange-700">
-            <p className="font-medium">Entire amount goes on credit:</p>
-            <p className="text-2xl font-bold mt-1">₦{total.toLocaleString()}</p>
+          <div className="mb-4 space-y-3">
+            <div className="bg-orange-50 rounded-xl p-4 text-sm text-orange-700">
+              <p className="font-medium">Entire amount goes on credit:</p>
+              <p className="text-2xl font-bold mt-1">₦{total.toLocaleString()}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Days Until Repayment Due *</label>
+              <input
+                type="number"
+                value={daysToSettle}
+                onChange={(e) => setDaysToSettle(e.target.value)}
+                placeholder="e.g. 14"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Customer will show up on the dashboard's overdue list after this many days
+              </p>
+            </div>
           </div>
         )}
                 {method === 'Deposit' && customer && (
@@ -949,7 +974,8 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
             !method || processing ||
             (needsCustomer && !customer) ||
             ((method === 'Credit' || method === 'Split') && needsCustomer && !creditAccount) ||
-            (method === 'Deposit' && customer && depositBalance < total)
+            (method === 'Deposit' && customer && depositBalance < total) ||
+            (method === 'Credit' && (!daysToSettle || Number(daysToSettle) <= 0))
           }
           className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
