@@ -591,6 +591,14 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
   const [methodNow, setMethodNow] = useState('cash')
   const [daysToSettle, setDaysToSettle] = useState('')
 
+  // Converts a day-count into an actual calendar date, since the backend
+  // stores a real due date (payment_due_date), not a day-count.
+  const daysToSettleAsDate = (days) => {
+    const d = new Date()
+    d.setDate(d.getDate() + Number(days))
+    return d.toISOString().split('T')[0]
+  }
+
   const allMethods = ['Cash', 'Transfer', 'POS', 'Credit', 'Split', 'Deposit']
   const methods = online ? allMethods : ['Cash', 'Transfer', 'POS']
   const needsCustomer = method === 'Credit' || method === 'Split' || method === 'Deposit'
@@ -664,11 +672,9 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         return
       }
     }
-    if (method === 'Credit') {
-      if (!daysToSettle || Number(daysToSettle) <= 0) {
-        toast.error('Enter how many days the customer has to settle this credit')
-        return
-      }
+    if ((method === 'Credit' || method === 'Split') && (!daysToSettle || Number(daysToSettle) <= 0)) {
+      toast.error('Enter how many days the customer has to settle this credit')
+      return
     }
     if (method === 'Deposit') {
       if (depositBalance < total) {
@@ -695,12 +701,13 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         })),
       }
 
+      if (method === 'Credit' || method === 'Split') {
+        salePayload.payment_due_date = daysToSettleAsDate(daysToSettle)
+      }
+
       if (method === 'Split') {
         salePayload.amount_paid_now = Number(amountPaidNow)
         salePayload.payment_method_now = methodNow
-      }
-      if (method === 'Credit') {
-        salePayload.days_to_settle = Number(daysToSettle)
       }
       if (method === 'Deposit') {
         salePayload.deposit_amount_used = total
@@ -965,6 +972,19 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
               <span>Remaining on credit</span>
               <span className="font-bold">₦{remainingOnCredit.toLocaleString()}</span>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Days Until Repayment Due *</label>
+              <input
+                type="number"
+                value={daysToSettle}
+                onChange={(e) => setDaysToSettle(e.target.value)}
+                placeholder="e.g. 14"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Customer will show up on the dashboard's overdue list after this many days
+              </p>
+            </div>
           </div>
         )}
 
@@ -975,7 +995,7 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
             (needsCustomer && !customer) ||
             ((method === 'Credit' || method === 'Split') && needsCustomer && !creditAccount) ||
             (method === 'Deposit' && customer && depositBalance < total) ||
-            (method === 'Credit' && (!daysToSettle || Number(daysToSettle) <= 0))
+            ((method === 'Credit' || method === 'Split') && (!daysToSettle || Number(daysToSettle) <= 0))
           }
           className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
         >

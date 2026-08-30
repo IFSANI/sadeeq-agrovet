@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit2, Search, User, Phone, Mail, MapPin, Wallet } from 'lucide-react'
+import { Plus, Edit2, Search, User, Phone, Mail, MapPin, Wallet, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import api from '../../services/api'
@@ -109,7 +109,14 @@ function Customers() {
                   <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
                     <User size={18} className="text-green-600" />
                   </div>
-                  <p className="font-semibold text-gray-800">{customer.name}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="font-semibold text-gray-800">{customer.name}</p>
+                    {customer.is_special_customer && (
+                      <span className="flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                        <Star size={9} /> Special
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={(e) => {

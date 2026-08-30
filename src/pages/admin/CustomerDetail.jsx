@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Phone, Mail, MapPin, Wallet, AlertCircle, PlusCircle } from 'lucide-react'
+import { ArrowLeft, Phone, Mail, MapPin, Wallet, AlertCircle, PlusCircle, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
@@ -22,9 +22,25 @@ function CustomerDetail() {
   const [loadingDepositTransactions, setLoadingDepositTransactions] = useState(true)
   const [showRecordDeposit, setShowRecordDeposit] = useState(false)
   const [showAdjustDeposit, setShowAdjustDeposit] = useState(false)
+  const [togglingSpecial, setTogglingSpecial] = useState(false)
   const { user } = useAuthStore()
   const canAdjustDebt = user?.role === 'admin' || user?.role === 'super_admin'
   const { online } = useOnlineStatus()
+
+  const handleToggleSpecial = async () => {
+    setTogglingSpecial(true)
+    try {
+      const res = await api.put(`/api/customers/${id}`, { is_special_customer: !customer.is_special_customer })
+      if (res.data.success) {
+        toast.success(customer.is_special_customer ? 'Removed special pricing' : 'Marked as special customer')
+        fetchCustomer()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update customer')
+    } finally {
+      setTogglingSpecial(false)
+    }
+  }
 
   const fetchCustomer = async () => {
     setLoading(true)
@@ -118,7 +134,14 @@ function CustomerDetail() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">{customer.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-gray-800">{customer.name}</h1>
+              {customer.is_special_customer && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">
+                  <Star size={12} /> Special Customer
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
               {customer.phone && (
                 <span className="flex items-center gap-1.5"><Phone size={14} /> {customer.phone}</span>
@@ -133,6 +156,24 @@ function CustomerDetail() {
               </p>
             )}
           </div>
+
+          {canAdjustDebt && (
+            <button
+              onClick={handleToggleSpecial}
+              disabled={togglingSpecial}
+              className={`text-xs font-semibold px-3 py-2 rounded-xl transition disabled:opacity-60 ${
+                customer.is_special_customer
+                  ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {togglingSpecial
+                ? 'Updating...'
+                : customer.is_special_customer
+                  ? 'Remove Special Pricing'
+                  : 'Mark as Special Customer'}
+            </button>
+          )}
         </div>
       </div>
 
