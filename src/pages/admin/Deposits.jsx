@@ -1,15 +1,23 @@
 import { useState, useEffect } from 'react'
-import { Search, Wallet, User, Plus, X, UserPlus } from 'lucide-react'
+import { Search, Wallet, User, Plus, X, UserPlus, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import useAuthStore from '../../store/authStore'
+
+const SHOP_NAME = 'SADEEQ AGROVET AND GENERAL MERCHANT'
 
 function Deposits() {
+  const { user } = useAuthStore()
   const [customers, setCustomers] = useState([])
+  const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [depositingCustomer, setDepositingCustomer] = useState(null) // null = closed, {} = open picker, {id,...} = prefilled
   const [showNewDeposit, setShowNewDeposit] = useState(false)
   const [receiptData, setReceiptData] = useState(null)
+  const [printingCustomer, setPrintingCustomer] = useState(null)
+
+  const branchName = branches.find((b) => b.id === user?.branch_id)?.name || ''
 
   const fetchCustomers = async () => {
     setLoading(true)
@@ -26,7 +34,12 @@ function Deposits() {
     }
   }
 
-  useEffect(() => { fetchCustomers() }, [])
+  useEffect(() => {
+    fetchCustomers()
+    api.get('/api/branches')
+      .then((res) => { if (res.data.success) setBranches(res.data.data) })
+      .catch(() => {})
+  }, [])
 
   const filtered = customers.filter((c) => {
     if (!search) return true
@@ -112,12 +125,21 @@ function Deposits() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setDepositingCustomer(customer)}
-                        className="text-xs font-semibold text-green-600 hover:text-green-700"
-                      >
-                        Add More
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => setPrintingCustomer(customer)}
+                          title="Print balance receipt"
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <Printer size={15} />
+                        </button>
+                        <button
+                          onClick={() => setDepositingCustomer(customer)}
+                          className="text-xs font-semibold text-green-600 hover:text-green-700"
+                        >
+                          Add More
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -144,7 +166,7 @@ function Deposits() {
           onSaved={(receipt) => {
             setDepositingCustomer(null)
             fetchCustomers()
-            setReceiptData(receipt)
+            setReceiptData({ ...receipt, shopName: SHOP_NAME, branchName, adminName: user?.name })
           }}
         />
       )}
@@ -153,6 +175,21 @@ function Deposits() {
         <DepositReceiptModal
           receipt={receiptData}
           onClose={() => setReceiptData(null)}
+        />
+      )}
+
+      {printingCustomer && (
+        <DepositReceiptModal
+          receipt={{
+            customerName: printingCustomer.name,
+            customerPhone: printingCustomer.phone,
+            newBalance: Number(printingCustomer.deposit_account?.current_balance || 0),
+            date: new Date(),
+            shopName: SHOP_NAME,
+            branchName,
+            adminName: user?.name,
+          }}
+          onClose={() => setPrintingCustomer(null)}
         />
       )}
 
@@ -413,13 +450,19 @@ function DepositReceiptModal({ receipt, onClose }) {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
       <style>{`
         @media print {
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
           body * { visibility: hidden; }
           .printable-receipt, .printable-receipt * { visibility: visible; }
           .printable-receipt {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
+            width: 80mm;
+            padding: 4mm;
+            font-size: 12px;
           }
           .no-print { display: none !important; }
         }
@@ -435,7 +478,13 @@ function DepositReceiptModal({ receipt, onClose }) {
         </div>
 
         <div className="text-center border-b border-dashed border-gray-200 pb-4 mb-4">
-          <p className="text-lg font-bold text-gray-800">Deposit Receipt</p>
+          {receipt.shopName && (
+            <p className="text-base font-bold text-gray-800 uppercase">{receipt.shopName}</p>
+          )}
+          {receipt.branchName && (
+            <p className="text-xs text-gray-500 mt-0.5">{receipt.branchName} Branch</p>
+          )}
+          <p className="text-sm font-semibold text-gray-700 mt-2">{receipt.amount != null ? 'Deposit Receipt' : 'Balance Statement'}</p>
           <p className="text-xs text-gray-400 mt-1">
             {receipt.date.toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}
           </p>
@@ -450,10 +499,12 @@ function DepositReceiptModal({ receipt, onClose }) {
             <span className="text-gray-500">Phone</span>
             <span className="font-medium text-gray-800">{receipt.customerPhone}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Received Via</span>
-            <span className="font-medium text-gray-800 capitalize">{receipt.paymentMethod}</span>
-          </div>
+          {receipt.paymentMethod && (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Received Via</span>
+              <span className="font-medium text-gray-800 capitalize">{receipt.paymentMethod}</span>
+            </div>
+          )}
           {receipt.reference && (
             <div className="flex justify-between">
               <span className="text-gray-500">Reference</span>
@@ -463,17 +514,30 @@ function DepositReceiptModal({ receipt, onClose }) {
         </div>
 
         <div className="border-t border-dashed border-gray-200 pt-4 mb-4">
-          <div className="flex justify-between items-center">
-            <span className="font-semibold text-gray-700">Amount Deposited</span>
-            <span className="text-xl font-bold text-green-600">₦{receipt.amount.toLocaleString()}</span>
-          </div>
-          {receipt.newBalance != null && (
-            <div className="flex justify-between items-center mt-2 text-sm">
-              <span className="text-gray-500">New Deposit Balance</span>
-              <span className="font-semibold text-gray-700">₦{Number(receipt.newBalance).toLocaleString()}</span>
+          {receipt.amount != null ? (
+            <>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-gray-700">Amount Deposited</span>
+                <span className="text-xl font-bold text-green-600">₦{receipt.amount.toLocaleString()}</span>
+              </div>
+              {receipt.newBalance != null && (
+                <div className="flex justify-between items-center mt-2 text-sm">
+                  <span className="text-gray-500">New Deposit Balance</span>
+                  <span className="font-semibold text-gray-700">₦{Number(receipt.newBalance).toLocaleString()}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-gray-700">Current Deposit Balance</span>
+              <span className="text-xl font-bold text-green-600">₦{Number(receipt.newBalance || 0).toLocaleString()}</span>
             </div>
           )}
         </div>
+
+        {receipt.adminName && (
+          <p className="text-xs text-gray-400 text-center mb-4">Served by {receipt.adminName}</p>
+        )}
 
         <div className="flex gap-3 no-print">
           <button

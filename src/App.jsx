@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import Login from './pages/auth/Login'
 import AdminLayout from './components/common/AdminLayout'
@@ -81,11 +81,13 @@ function CustomerPortalPage({ children, title }) {
 // Not logged in -> /login. Logged in but wrong role -> their own dashboard.
 function ProtectedRoute({ allowed, requireMainBranch, children }) {
   const { user, isAuthenticated, defaultBranchId } = useAuthStore()
+  const location = useLocation()
   const isMainBranchUser = useBranchStore((state) => state.isMainBranchUser)
   const branchesLoaded = useBranchStore((state) => state.loaded)
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+    const loginPath = location.pathname.startsWith('/customer') ? '/customer/login' : '/login'
+    return <Navigate to={loginPath} replace />
   }
 
   const fallback = user?.role === 'cashier'
