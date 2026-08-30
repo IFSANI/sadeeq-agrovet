@@ -183,5 +183,52 @@ router.post('/:id/credit/adjust', requireRole('super_admin', 'admin'), async (re
     return error(res, 'Server error', 500)
   }
 })
+router.post('/:id/credit/repay-from-deposit', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
+  try {
+    const { id: customer_id } = req.params
+    const { amount } = req.body
+    if (!amount || amount <= 0) return error(res, 'A valid amount is required')
+
+    const { data: creditAccount } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
+    if (!creditAccount) return error(res, 'This customer has no credit account')
+    if (Number(amount) > Number(creditAccount.current_balance)) return error(res, 'Amount exceeds the outstanding credit balance')
+
+    const { data: depositAccount } = await supabase.from('deposit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
+    if (!depositAccount) return error(res, 'This customer has no deposit account')
+    if (Number(amount) > Number(depositAccount.current_balance)) return error(res, "Amount exceeds the customer's deposit balance")
+
+    const newCreditBalance = Number(creditAccount.current_balance) - Number(amount)
+    const newDepositBalance = Number(depositAccount.current_balance) - Number(amount)
+
+    const { data: payment, error: payErr } = await supabase
+      .from('payments')
+      .insert({ credit_account_id: creditAccount.id, amount, payment_method: 'deposit', confirmed_by: req.user.id })
+      .select().single()
+
+    if (payErr) return error(res, 'Could not record payment', 500)
+
+    const { error: creditErr } = await supabase.from('credit_accounts').update({ current_balance: newCreditBalance }).eq('id', creditAccount.id)
+    if (creditErr) return error(res, 'Could not update credit balance', 500)
+
+    await supabase.from('credit_transactions').insert({
+      credit_account_id: creditAccount.id, type: 'credit', amount, payment_id: payment.id, balance_after: newCreditBalance, note: 'Paid from deposit balance'
+    })
+
+    const { error: depositErr } = await supabase.from('deposit_accounts').update({ current_balance: newDepositBalance }).eq('id', depositAccount.id)
+    if (depositErr) return error(res, 'Could not update deposit balance', 500)
+
+    await supabase.from('deposit_transactions').insert({
+      deposit_account_id: depositAccount.id, type: 'deposit_out', amount, balance_after: newDepositBalance, note: 'Used to repay credit balance'
+    })
+
+    await supabase.from('audit_logs').insert({
+      user_id: req.user.id, action: 'repay_from_deposit', entity_type: 'credit_account', entity_id: creditAccount.id, new_value: { amount, newCreditBalance, newDepositBalance }
+    })
+
+    return success(res, { payment, new_credit_balance: newCreditBalance, new_deposit_balance: newDepositBalance }, 'Credit repaid from deposit balance')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 
 export default router

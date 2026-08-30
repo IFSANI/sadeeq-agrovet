@@ -533,7 +533,9 @@ function RepaymentModal({ customer, online, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
 
   const balance = Number(customer.credit_account?.current_balance || 0)
-  const methods = ['cash', 'transfer', 'pos']
+  const depositBalance = Number(customer.deposit_account?.current_balance || 0)
+  const hasDeposit = depositBalance > 0
+  const methods = ['cash', 'transfer', 'pos', ...(hasDeposit ? ['deposit'] : [])]
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -545,8 +547,21 @@ function RepaymentModal({ customer, online, onClose, onSaved }) {
       toast.error(`Amount can't exceed the outstanding balance of ₦${balance.toLocaleString()}`)
       return
     }
+    if (paymentMethod === 'deposit' && Number(amount) > depositBalance) {
+      toast.error(`Amount can't exceed the deposit balance of ₦${depositBalance.toLocaleString()}`)
+      return
+    }
     setSaving(true)
     try {
+      if (paymentMethod === 'deposit') {
+        const res = await api.post(`/api/customers/${customer.id}/credit/repay-from-deposit`, { amount: Number(amount) })
+        if (res.data.success) {
+          toast.success('Repaid from deposit balance!')
+          onSaved()
+        }
+        return
+      }
+
       const payload = { amount: Number(amount), payment_method: paymentMethod }
       if (reference) payload.reference = reference
 
@@ -583,6 +598,11 @@ function RepaymentModal({ customer, online, onClose, onSaved }) {
           <p className="text-sm text-orange-700 mt-2">
             Currently owes <span className="font-bold">₦{balance.toLocaleString()}</span>
           </p>
+          {hasDeposit && (
+            <p className="text-sm text-green-700 mt-1">
+              Deposit available: <span className="font-bold">₦{depositBalance.toLocaleString()}</span>
+            </p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -599,7 +619,7 @@ function RepaymentModal({ customer, online, onClose, onSaved }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-2">Payment Method</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid gap-2 ${hasDeposit ? 'grid-cols-4' : 'grid-cols-3'}`}>
               {methods.map((m) => (
                 <button
                   key={m}
@@ -617,15 +637,17 @@ function RepaymentModal({ customer, online, onClose, onSaved }) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Reference (optional)</label>
-            <input
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              placeholder="e.g. transaction ID, note"
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-            />
-          </div>
+          {paymentMethod !== 'deposit' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Reference (optional)</label>
+              <input
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder="e.g. transaction ID, note"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button

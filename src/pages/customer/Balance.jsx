@@ -54,7 +54,7 @@ function Balance() {
             <p className="text-sm font-semibold">Deposit Balance</p>
           </div>
           <p className="text-2xl font-bold text-gray-800">
-            ₦{Number(deposit?.balance || 0).toLocaleString()}
+            ₦{Number(deposit?.current_balance || 0).toLocaleString()}
           </p>
           {!deposit && (
             <p className="text-xs text-gray-400 mt-2">You don't have a deposit account yet.</p>
