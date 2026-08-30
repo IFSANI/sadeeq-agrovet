@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import useAuthStore from '../../store/authStore'
 import { useNavigate } from 'react-router-dom'
 import { staffLogin } from '../../services/authService'
+import Logo from '../../components/common/Logo'
 
 const loginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
@@ -55,8 +56,8 @@ function Login() {
 
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-600 rounded-2xl mb-4 shadow-lg">
-            <span className="text-white text-2xl font-bold">SA</span>
+          <div className="inline-flex justify-center mb-4">
+            <Logo size={64} showText={false} />
           </div>
           <h1 className="text-2xl font-bold text-gray-800">SADEEQ AGROVET</h1>
           <p className="text-gray-500 text-sm mt-1">AND GENERAL MERCHANT</p>

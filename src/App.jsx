@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
+import Landing from './pages/Landing'
 import Login from './pages/auth/Login'
 import AdminLayout from './components/common/AdminLayout'
 import CashierLayout from './components/common/CashierLayout'
@@ -79,6 +80,14 @@ function CustomerPortalPage({ children, title }) {
 
 // Guards a route by role. `allowed` is an array of roles permitted here.
 // Not logged in -> /login. Logged in but wrong role -> their own dashboard.
+function dashboardPathFor(user) {
+  return user?.role === 'cashier'
+    ? '/cashier/dashboard'
+    : user?.role === 'customer'
+      ? '/customer/dashboard'
+      : '/admin/dashboard'
+}
+
 function ProtectedRoute({ allowed, requireMainBranch, children }) {
   const { user, isAuthenticated, defaultBranchId } = useAuthStore()
   const location = useLocation()
@@ -90,11 +99,7 @@ function ProtectedRoute({ allowed, requireMainBranch, children }) {
     return <Navigate to={loginPath} replace />
   }
 
-  const fallback = user?.role === 'cashier'
-    ? '/cashier/dashboard'
-    : user?.role === 'customer'
-      ? '/customer/dashboard'
-      : '/admin/dashboard'
+  const fallback = dashboardPathFor(user)
 
   if (!allowed.includes(user?.role)) {
     return <Navigate to={fallback} replace />
@@ -113,6 +118,22 @@ function ProtectedRoute({ allowed, requireMainBranch, children }) {
     }
   }
 
+  return children
+}
+
+function RootRoute() {
+  const { isAuthenticated, user } = useAuthStore()
+  if (isAuthenticated) {
+    return <Navigate to={dashboardPathFor(user)} replace />
+  }
+  return <Landing />
+}
+
+function PublicOnlyRoute({ children }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (isAuthenticated) {
+    return <Navigate to={dashboardPathFor(user)} replace />
+  }
   return children
 }
 
@@ -142,10 +163,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/customer/login" element={<CustomerLogin />} />
-        <Route path="/customer/register" element={<CustomerRegister />} />
+        <Route path="/" element={<RootRoute />} />
+        <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+        <Route path="/customer/login" element={<PublicOnlyRoute><CustomerLogin /></PublicOnlyRoute>} />
+        <Route path="/customer/register" element={<PublicOnlyRoute><CustomerRegister /></PublicOnlyRoute>} />
 
         <Route path="/customer/dashboard" element={
           <ProtectedRoute allowed={['customer']}><CustomerPortalPage><BookChicks /></CustomerPortalPage></ProtectedRoute>

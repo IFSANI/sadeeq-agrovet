@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
+import Logo from '../../components/common/Logo'
 
 function CustomerLogin() {
   const [phone, setPhone] = useState('')
@@ -82,8 +83,8 @@ function CustomerLogin() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 w-full max-w-sm p-6">
         {/* Logo / Header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center mx-auto mb-3">
-            <span className="text-white text-lg font-bold">SA</span>
+          <div className="flex justify-center mb-3">
+            <Logo size={48} showText={false} />
           </div>
 
           <h1 className="text-lg font-bold text-gray-800">
