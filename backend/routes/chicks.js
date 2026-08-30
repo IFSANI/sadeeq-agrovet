@@ -13,6 +13,12 @@ router.get('/varieties', requireAuth, async (req, res) => {
     if (!includeInactive) query = query.eq('is_active', true)
     const { data, error: dbError } = await query
     if (dbError) return error(res, 'Could not fetch varieties', 500)
+
+    if (req.user.role === 'customer') {
+      const stripped = data.map(({ wholesale_price_per_carton, wholesale_price_per_piece, ...rest }) => rest)
+      return success(res, stripped, 'Varieties fetched')
+    }
+
     return success(res, data, 'Varieties fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
@@ -21,15 +27,19 @@ router.get('/varieties', requireAuth, async (req, res) => {
 
 router.post('/varieties', requireAuth, requireRole('super_admin', 'admin'), async (req, res) => {
   try {
-    const { name, price_per_carton, price_per_piece, pieces_per_carton } = req.body
-    if (!name || price_per_carton === undefined || price_per_piece === undefined) {
-      return error(res, 'name, price_per_carton and price_per_piece are required')
-    }
+    const { name, price_per_carton, price_per_piece, pieces_per_carton, wholesale_price_per_carton, wholesale_price_per_piece } = req.body
+if (!name || price_per_carton === undefined || price_per_piece === undefined) {
+  return error(res, 'name, price_per_carton and price_per_piece are required')
+}
 
-    const { data: variety, error: dbError } = await supabase
-      .from('chick_varieties')
-      .insert({ name, price_per_carton, price_per_piece, pieces_per_carton: pieces_per_carton || 50 })
-      .select().single()
+const { data: variety, error: dbError } = await supabase
+  .from('chick_varieties')
+  .insert({
+    name, price_per_carton, price_per_piece, pieces_per_carton: pieces_per_carton || 50,
+    wholesale_price_per_carton: wholesale_price_per_carton ?? null,
+    wholesale_price_per_piece: wholesale_price_per_piece ?? null
+  })
+  .select().single()
 
     if (dbError) return error(res, 'Could not create variety', 500)
     return success(res, variety, 'Variety created')
@@ -41,7 +51,7 @@ router.post('/varieties', requireAuth, requireRole('super_admin', 'admin'), asyn
 router.put('/varieties/:id', requireAuth, requireRole('super_admin', 'admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const allowed = ['name', 'price_per_carton', 'price_per_piece', 'pieces_per_carton', 'is_active']
+    const allowed = ['name', 'price_per_carton', 'price_per_piece', 'pieces_per_carton', 'is_active', 'wholesale_price_per_carton', 'wholesale_price_per_piece']
     const updates = {}
     for (const key of allowed) if (req.body[key] !== undefined) updates[key] = req.body[key]
 
@@ -219,13 +229,19 @@ router.get('/bookings', requireAuth, requireRole('super_admin', 'admin', 'cashie
 
 router.post('/bookings', requireAuth, async (req, res) => {
   try {
-    const { customer_id, payment_method, items, deposit_amount_used } = req.body
+    const { customer_id, payment_method, items, deposit_amount_used, promised_payment_date } = req.body
     const finalCustomerId = req.user.role === 'customer' ? req.user.id : customer_id
     const branch_id = req.user.role === 'customer' ? null : (req.user.branch_id || null)
 
     if (!finalCustomerId) return error(res, 'customer_id is required')
     if (!payment_method) return error(res, 'payment_method is required')
     if (!Array.isArray(items) || items.length === 0) return error(res, 'items array is required')
+    if (payment_method === 'credit' && !promised_payment_date) {
+      return error(res, 'promised_payment_date is required for credit bookings')
+    }
+
+    const { data: customerRow } = await supabase.from('customers').select('is_special_customer').eq('id', finalCustomerId).single()
+    const isSpecial = !!customerRow?.is_special_customer
 
     const enrichedItems = []
     for (const item of items) {
@@ -250,8 +266,11 @@ router.post('/bookings', requireAuth, async (req, res) => {
         return error(res, 'Not enough cartons available for this schedule')
       }
 
-      const subtotal = (cartons * Number(variety.price_per_carton)) + (pieces * Number(variety.price_per_piece))
-      enrichedItems.push({ ...item, cartons, pieces, unit_price: variety.price_per_carton, subtotal })
+      const cartonPrice = isSpecial && variety.wholesale_price_per_carton != null ? Number(variety.wholesale_price_per_carton) : Number(variety.price_per_carton)
+      const piecePrice = isSpecial && variety.wholesale_price_per_piece != null ? Number(variety.wholesale_price_per_piece) : Number(variety.price_per_piece)
+
+      const subtotal = (cartons * cartonPrice) + (pieces * piecePrice)
+      enrichedItems.push({ ...item, cartons, pieces, unit_price: cartonPrice, subtotal })
     }
 
     const total_amount = enrichedItems.reduce((sum, i) => sum + i.subtotal, 0)
@@ -279,6 +298,9 @@ router.post('/bookings', requireAuth, async (req, res) => {
       depositAccount = account
     }
 
+    const bookingStatus = payment_method === 'deposit' ? 'confirmed' : 'pending_approval'
+    const paymentStatus = ['credit', 'deposit'].includes(payment_method) ? 'paid' : 'pending'
+
     const { data: booking, error: bookingErr } = await supabase
       .from('chick_bookings')
       .insert({
@@ -289,8 +311,9 @@ router.post('/bookings', requireAuth, async (req, res) => {
         total_amount,
         payment_method,
         deposit_amount_used: payment_method === 'deposit' ? total_amount : null,
-        payment_status: ['credit', 'deposit'].includes(payment_method) ? 'paid' : 'pending',
-        booking_status: 'pending_approval'
+        payment_due_date: payment_method === 'credit' ? promised_payment_date : null,
+        payment_status: paymentStatus,
+        booking_status: bookingStatus
       })
       .select().single()
 
@@ -318,7 +341,7 @@ router.post('/bookings', requireAuth, async (req, res) => {
       })
     }
 
-    return success(res, { ...booking, items: enrichedItems }, 'Booking created, awaiting approval')
+    return success(res, { ...booking, items: enrichedItems }, bookingStatus === 'confirmed' ? 'Booking confirmed and paid from deposit' : 'Booking created, awaiting approval')
   } catch (err) {
     return error(res, 'Server error', 500)
   }

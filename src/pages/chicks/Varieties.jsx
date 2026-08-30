@@ -152,6 +152,22 @@ function Varieties() {
                   <span className="text-gray-400">Pieces per Carton</span>
                   <span className="font-medium text-gray-700">{v.pieces_per_carton}</span>
                 </div>
+                {canManage && (v.wholesale_price_per_carton || v.wholesale_price_per_piece) && (
+                  <div className="border-t border-gray-50 pt-1.5 mt-1.5 space-y-1.5">
+                    {v.wholesale_price_per_carton && (
+                      <div className="flex justify-between">
+                        <span className="text-amber-600 text-xs">Wholesale / Carton</span>
+                        <span className="font-medium text-amber-700 text-xs">₦{Number(v.wholesale_price_per_carton).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {v.wholesale_price_per_piece && (
+                      <div className="flex justify-between">
+                        <span className="text-amber-600 text-xs">Wholesale / Piece</span>
+                        <span className="font-medium text-amber-700 text-xs">₦{Number(v.wholesale_price_per_piece).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -179,6 +195,8 @@ function VarietyModal({ variety, onClose, onSaved }) {
     price_per_carton: variety?.price_per_carton || '',
     price_per_piece: variety?.price_per_piece || '',
     pieces_per_carton: variety?.pieces_per_carton || 50,
+    wholesale_price_per_carton: variety?.wholesale_price_per_carton || '',
+    wholesale_price_per_piece: variety?.wholesale_price_per_piece || '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -199,6 +217,8 @@ function VarietyModal({ variety, onClose, onSaved }) {
         price_per_carton: Number(form.price_per_carton),
         price_per_piece: Number(form.price_per_piece),
         pieces_per_carton: Number(form.pieces_per_carton) || 50,
+        wholesale_price_per_carton: form.wholesale_price_per_carton ? Number(form.wholesale_price_per_carton) : null,
+        wholesale_price_per_piece: form.wholesale_price_per_piece ? Number(form.wholesale_price_per_piece) : null,
       }
 
       const res = variety
@@ -274,6 +294,37 @@ function VarietyModal({ variety, onClose, onSaved }) {
               placeholder="Defaults to 50"
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
             />
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-sm font-medium text-gray-700 mb-1">Special Customer Pricing</p>
+            <p className="text-xs text-gray-400 mb-3">
+              Charged automatically to customers flagged as "special" — regardless of quantity ordered.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Wholesale Price per Carton (₦)</label>
+                <input
+                  name="wholesale_price_per_carton"
+                  type="number"
+                  value={form.wholesale_price_per_carton}
+                  onChange={handleChange}
+                  placeholder="Optional"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Wholesale Price per Piece (₦)</label>
+                <input
+                  name="wholesale_price_per_piece"
+                  type="number"
+                  value={form.wholesale_price_per_piece}
+                  onChange={handleChange}
+                  placeholder="Optional"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-2">

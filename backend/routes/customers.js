@@ -127,7 +127,7 @@ router.get('/:id', requireRole('super_admin', 'admin', 'cashier'), async (req, r
   try {
     const { data, error: dbError } = await supabase
       .from('customers')
-      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, created_at, credit_account:credit_accounts(current_balance, credit_limit, status), deposit_account:deposit_accounts(id, current_balance)')
+      .select('id, name, phone, email, address, credit_limit, credit_status, notification_preference, is_special_customer, created_at, credit_account:credit_accounts(current_balance, credit_limit, status), deposit_account:deposit_accounts(id, current_balance)')
       .eq('id', req.params.id).single()
     if (dbError || !data) return error(res, 'Customer not found', 404)
     return success(res, data, 'Customer fetched')
@@ -142,7 +142,7 @@ router.put('/:id', requireRole('super_admin', 'admin', 'cashier'), async (req, r
     const { data: existing } = await supabase.from('customers').select('*').eq('id', id).single()
     if (!existing) return error(res, 'Customer not found', 404)
 
-    const allowed = ['name', 'phone', 'email', 'address', 'notification_preference']
+    const allowed = ['name', 'phone', 'email', 'address', 'notification_preference', 'is_special_customer']
     const updates = {}
     for (const key of allowed) if (req.body[key] !== undefined) updates[key] = req.body[key]
 
