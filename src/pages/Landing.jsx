@@ -58,7 +58,7 @@ function Landing() {
   )}`
 
   // Replace these with your actual community links
-  const FACEBOOK_COMMUNITY = 'https://facebook.com/YOUR_COMMUNITY'
+  const FACEBOOK_COMMUNITY = 'https://facebook.com/profile.php?id=100054411492776'
   const WHATSAPP_COMMUNITY = 'https://chat.whatsapp.com/YOUR_COMMUNITY_LINK'
 
   return (
