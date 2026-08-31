@@ -242,9 +242,20 @@ function CheckoutModal({ cart, total, onRemove, onClose, onDone }) {
   const [method, setMethod] = useState('transfer')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(null)
+  const [daysToSettle, setDaysToSettle] = useState('')
+
+  const daysToSettleAsDate = (days) => {
+    const d = new Date()
+    d.setDate(d.getDate() + Number(days))
+    return d.toISOString().split('T')[0]
+  }
 
   const handleSubmit = async () => {
     if (cart.length === 0) return
+    if (method === 'credit' && (!daysToSettle || Number(daysToSettle) <= 0)) {
+      toast.error('Enter how many days you need to settle this credit')
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -257,6 +268,7 @@ function CheckoutModal({ cart, total, onRemove, onClose, onDone }) {
         })),
       }
       if (method === 'deposit') payload.deposit_amount_used = total
+      if (method === 'credit') payload.promised_payment_date = daysToSettleAsDate(daysToSettle)
 
       const res = await api.post('/api/chicks/bookings', payload)
       const booking = res.data.data || res.data
@@ -293,10 +305,14 @@ function CheckoutModal({ cart, total, onRemove, onClose, onDone }) {
           <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
             <Bird size={24} className="text-green-600" />
           </div>
-          <h2 className="text-lg font-bold text-gray-800 mb-1">Booking Submitted!</h2>
+          <h2 className="text-lg font-bold text-gray-800 mb-1">
+            {done.booking_status === 'confirmed' ? 'Booking Confirmed!' : 'Booking Submitted!'}
+          </h2>
           <p className="text-sm text-gray-500 mb-4">
             Your booking code is <span className="font-mono font-semibold text-gray-800">{done.booking_code}</span>.
-            It's awaiting approval — check "My Bookings" for status updates.
+            {done.booking_status === 'confirmed'
+              ? ' Your deposit covered it in full — just bring this code or image when you come to collect.'
+              : ' It\'s awaiting approval — check "My Bookings" for status updates.'}
           </p>
           {method === 'transfer' && (
             <div className="bg-blue-50 rounded-xl p-4 text-sm text-blue-700 text-left mb-4">
@@ -361,7 +377,7 @@ function CheckoutModal({ cart, total, onRemove, onClose, onDone }) {
 
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-600 mb-2">Payment Method</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {['transfer', 'credit', 'deposit'].map((m) => (
               <button
                 key={m}
@@ -374,8 +390,33 @@ function CheckoutModal({ cart, total, onRemove, onClose, onDone }) {
                 {m}
               </button>
             ))}
+            <button
+              type="button"
+              disabled
+              title="Coming soon"
+              className="py-2 rounded-xl border-2 border-gray-100 text-xs font-semibold text-gray-300 cursor-not-allowed relative"
+            >
+              Paystack
+              <span className="absolute -top-2 -right-1 bg-gray-200 text-gray-500 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                SOON
+              </span>
+            </button>
           </div>
-          {method === 'credit' && <p className="text-xs text-gray-400 mt-1">You need an existing credit account with enough limit.</p>}
+          {method === 'credit' && (
+            <>
+              <p className="text-xs text-gray-400 mt-1 mb-2">You need an existing credit account with enough limit.</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Days Until You'll Pay *</label>
+                <input
+                  type="number"
+                  value={daysToSettle}
+                  onChange={(e) => setDaysToSettle(e.target.value)}
+                  placeholder="e.g. 14"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                />
+              </div>
+            </>
+          )}
           {method === 'deposit' && <p className="text-xs text-gray-400 mt-1">Your deposit balance must fully cover the total.</p>}
         </div>
 
@@ -385,7 +426,7 @@ function CheckoutModal({ cart, total, onRemove, onClose, onDone }) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving || cart.length === 0}
+            disabled={saving || cart.length === 0 || (method === 'credit' && (!daysToSettle || Number(daysToSettle) <= 0))}
             className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60"
           >
             {saving ? 'Booking...' : 'Confirm Booking'}

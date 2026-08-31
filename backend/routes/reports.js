@@ -363,5 +363,72 @@ router.get('/chicks/profit-loss', async (req, res) => {
     return error(res, 'Server error', 500)
   }
 })
+router.get('/due-payments', async (req, res) => {
+  try {
+    let { branch_id } = req.query
+    if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
+
+    const now = new Date()
+
+    let saleQuery = supabase
+      .from('sales')
+      .select('id, branch_id, customer_id, total_amount, days_to_settle, created_at, customers(name, credit_accounts(current_balance)), branches(name)')
+      .eq('payment_method', 'credit')
+    if (branch_id) saleQuery = saleQuery.eq('branch_id', branch_id)
+    const { data: sales } = await saleQuery
+
+    const overdueSales = (sales || [])
+      .filter(s => {
+        const balance = s.customers?.credit_accounts?.current_balance
+        if (!balance || Number(balance) <= 0) return false
+        const due = new Date(s.created_at)
+        due.setDate(due.getDate() + (s.days_to_settle || 0))
+        return due <= now
+      })
+      .map(s => {
+        const due = new Date(s.created_at)
+        due.setDate(due.getDate() + (s.days_to_settle || 0))
+        return {
+          type: 'sale',
+          id: s.id,
+          customer_name: s.customers?.name || null,
+          branch_name: s.branches?.name || null,
+          total_amount: s.total_amount,
+          due_date: due.toISOString().slice(0, 10),
+          current_balance: s.customers?.credit_accounts?.current_balance ?? null
+        }
+      })
+
+    let bookingQuery = supabase
+      .from('chick_bookings')
+      .select('id, branch_id, customer_id, total_amount, payment_due_date, customers(name, credit_accounts(current_balance)), branches(name)')
+      .eq('payment_method', 'credit')
+      .not('payment_due_date', 'is', null)
+    if (branch_id) bookingQuery = bookingQuery.eq('branch_id', branch_id)
+    const { data: bookings } = await bookingQuery
+
+    const overdueBookings = (bookings || [])
+      .filter(b => {
+        const balance = b.customers?.credit_accounts?.current_balance
+        if (!balance || Number(balance) <= 0) return false
+        return new Date(b.payment_due_date) <= now
+      })
+      .map(b => ({
+        type: 'chick_booking',
+        id: b.id,
+        customer_name: b.customers?.name || null,
+        branch_name: b.branches?.name || null,
+        total_amount: b.total_amount,
+        due_date: b.payment_due_date,
+        current_balance: b.customers?.credit_accounts?.current_balance ?? null
+      }))
+
+    const combined = [...overdueSales, ...overdueBookings].sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
+
+    return success(res, combined, 'Due payments fetched')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
 
 export default router

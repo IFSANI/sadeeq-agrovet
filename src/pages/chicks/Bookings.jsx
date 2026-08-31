@@ -249,6 +249,13 @@ function NewBookingModal({ onClose, onCreated }) {
   const [items, setItems] = useState([{ schedule_id: '', cartons: '', pieces: '' }])
   const [method, setMethod] = useState('cash')
   const [saving, setSaving] = useState(false)
+  const [daysToSettle, setDaysToSettle] = useState('')
+
+  const daysToSettleAsDate = (days) => {
+    const d = new Date()
+    d.setDate(d.getDate() + Number(days))
+    return d.toISOString().split('T')[0]
+  }
 
   useEffect(() => {
     if (customerQuery.length < 2) { setCustomerResults([]); return }
@@ -308,6 +315,10 @@ function NewBookingModal({ onClose, onCreated }) {
       toast.error(`Insufficient deposit balance. Customer has ₦${depositBalance.toLocaleString()}, total is ₦${total.toLocaleString()}.`)
       return
     }
+    if (method === 'credit' && (!daysToSettle || Number(daysToSettle) <= 0)) {
+      toast.error('Enter how many days the customer has to settle this credit')
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -321,6 +332,7 @@ function NewBookingModal({ onClose, onCreated }) {
         })),
       }
       if (method === 'deposit') payload.deposit_amount_used = total
+      if (method === 'credit') payload.promised_payment_date = daysToSettleAsDate(daysToSettle)
 
       const res = await api.post('/api/chicks/bookings', payload)
       const code = res.data.data?.booking_code || res.data.booking_code
@@ -479,6 +491,19 @@ function NewBookingModal({ onClose, onCreated }) {
               </div>
             </div>
 
+            {method === 'credit' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Days Until Repayment Due *</label>
+                <input
+                  type="number"
+                  value={daysToSettle}
+                  onChange={(e) => setDaysToSettle(e.target.value)}
+                  placeholder="e.g. 14"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                />
+              </div>
+            )}
+
             {method === 'deposit' && (
               <div className={`rounded-xl p-3 text-sm ${depositBalance >= total ? 'bg-teal-50 text-teal-700' : 'bg-red-50 text-red-600'}`}>
                 <div className="flex justify-between">
@@ -497,7 +522,7 @@ function NewBookingModal({ onClose, onCreated }) {
               </button>
               <button
                 type="submit"
-                disabled={saving || (method === 'deposit' && depositBalance < total)}
+                disabled={saving || (method === 'deposit' && depositBalance < total) || (method === 'credit' && (!daysToSettle || Number(daysToSettle) <= 0))}
                 className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60"
               >
                 {saving ? 'Creating...' : 'Create Booking'}
