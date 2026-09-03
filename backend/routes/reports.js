@@ -431,4 +431,86 @@ router.get('/due-payments', async (req, res) => {
   }
 })
 
+router.get('/daily-collections', async (req, res) => {
+  try {
+    let { date, branch_id } = req.query
+    if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
+    if (!date) date = new Date().toISOString().slice(0, 10)
+
+    const startOfDay = `${date}T00:00:00`
+    const nextDay = new Date(date)
+    nextDay.setDate(nextDay.getDate() + 1)
+    const endOfDay = nextDay.toISOString().slice(0, 10) + 'T00:00:00'
+
+    let saleQuery = supabase
+      .from('sales')
+      .select('payment_method, total_amount, amount_paid')
+      .eq('status', 'completed')
+      .gte('created_at', startOfDay).lt('created_at', endOfDay)
+    if (branch_id) saleQuery = saleQuery.eq('branch_id', branch_id)
+    const { data: sales } = await saleQuery
+
+    let cash_sales = 0, transfer_sales = 0, pos_sales = 0, split_upfront = 0
+    for (const s of sales || []) {
+      if (s.payment_method === 'cash') cash_sales += Number(s.total_amount)
+      else if (s.payment_method === 'transfer') transfer_sales += Number(s.total_amount)
+      else if (s.payment_method === 'pos') pos_sales += Number(s.total_amount)
+      else if (s.payment_method === 'split') split_upfront += Number(s.amount_paid || 0)
+    }
+
+    let bookingQuery = supabase
+      .from('chick_bookings')
+      .select('payment_method, total_amount')
+      .in('payment_method', ['cash', 'transfer', 'pos'])
+      .gte('created_at', startOfDay).lt('created_at', endOfDay)
+    if (branch_id) bookingQuery = bookingQuery.eq('branch_id', branch_id)
+    const { data: bookings } = await bookingQuery
+
+    for (const b of bookings || []) {
+      if (b.payment_method === 'cash') cash_sales += Number(b.total_amount)
+      else if (b.payment_method === 'transfer') transfer_sales += Number(b.total_amount)
+      else if (b.payment_method === 'pos') pos_sales += Number(b.total_amount)
+    }
+
+    let depositQuery = supabase
+      .from('deposit_transactions')
+      .select('amount')
+      .eq('type', 'deposit_in')
+      .gte('created_at', startOfDay).lt('created_at', endOfDay)
+    if (branch_id) depositQuery = depositQuery.eq('branch_id', branch_id)
+    const { data: deposits } = await depositQuery
+
+    const deposits_received = (deposits || []).reduce((sum, d) => sum + Number(d.amount), 0)
+
+    let repayQuery = supabase
+      .from('payments')
+      .select('amount')
+      .not('credit_account_id', 'is', null)
+      .is('sale_id', null)
+      .neq('payment_method', 'deposit')
+      .gte('created_at', startOfDay).lt('created_at', endOfDay)
+    if (branch_id) repayQuery = repayQuery.eq('branch_id', branch_id)
+    const { data: repayments } = await repayQuery
+
+    const credit_repayments = (repayments || []).reduce((sum, p) => sum + Number(p.amount), 0)
+
+    const total = cash_sales + transfer_sales + pos_sales + split_upfront + deposits_received + credit_repayments
+
+    return success(res, {
+      date,
+      total: Math.round(total * 100) / 100,
+      breakdown: {
+        cash_sales: Math.round(cash_sales * 100) / 100,
+        transfer_sales: Math.round(transfer_sales * 100) / 100,
+        pos_sales: Math.round(pos_sales * 100) / 100,
+        split_upfront: Math.round(split_upfront * 100) / 100,
+        deposits_received: Math.round(deposits_received * 100) / 100,
+        credit_repayments: Math.round(credit_repayments * 100) / 100
+      }
+    }, 'Daily collections fetched')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
 export default router

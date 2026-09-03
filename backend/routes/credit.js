@@ -98,9 +98,11 @@ router.get('/:id/credit/transactions', requireRole('super_admin', 'admin', 'cash
 router.post('/:id/credit/repay', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
-    const { amount, payment_method, reference, offline_id } = req.body
+    const { amount, payment_method, reference, offline_id, branch_id } = req.body
     if (!amount || amount <= 0) return error(res, 'A valid amount is required')
     if (!payment_method) return error(res, 'payment_method is required')
+
+    const effectiveBranchId = req.user.role === 'super_admin' ? (branch_id || null) : req.user.branch_id
 
     if (offline_id) {
       const { data: existingPayment } = await supabase.from('payments').select('*').eq('offline_id', offline_id).maybeSingle()
@@ -118,7 +120,7 @@ router.post('/:id/credit/repay', requireRole('super_admin', 'admin', 'cashier'),
 
     const { data: payment, error: payErr } = await supabase
       .from('payments')
-      .insert({ credit_account_id: account.id, amount, payment_method, reference: reference || null, confirmed_by: req.user.id, offline_id: offline_id || null })
+      .insert({ credit_account_id: account.id, amount, payment_method, reference: reference || null, confirmed_by: req.user.id, offline_id: offline_id || null, branch_id: effectiveBranchId })
       .select().single()
 
     if (payErr) {

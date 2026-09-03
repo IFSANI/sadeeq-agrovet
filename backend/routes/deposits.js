@@ -9,9 +9,11 @@ router.use(requireAuth)
 router.post('/:id/deposit/add', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
-    const { amount, payment_method, reference } = req.body
+    const { amount, payment_method, reference, branch_id } = req.body
     if (!amount || amount <= 0) return error(res, 'A valid amount is required')
     if (!payment_method) return error(res, 'payment_method is required')
+
+const effectiveBranchId = req.user.role === 'super_admin' ? (branch_id || null) : req.user.branch_id
 
     const { data: customer } = await supabase.from('customers').select('id').eq('id', customer_id).single()
     if (!customer) return error(res, 'Customer not found', 404)
@@ -35,8 +37,8 @@ router.post('/:id/deposit/add', requireRole('super_admin', 'admin', 'cashier'), 
     if (dbError) return error(res, 'Could not update deposit balance', 500)
 
     await supabase.from('deposit_transactions').insert({
-        deposit_account_id: account.id, type: 'deposit_in', amount, payment_method, reference: reference || null,
-        confirmed_by: req.user.id, balance_after: newBalance
+      deposit_account_id: account.id, type: 'deposit_in', amount, payment_method, reference: reference || null,
+      confirmed_by: req.user.id, balance_after: newBalance, branch_id: effectiveBranchId
     })
 
     await supabase.from('audit_logs').insert({
@@ -61,12 +63,14 @@ router.get('/:id/deposit/transactions', async (req, res) => {
 
     const { data, error: dbError } = await supabase
       .from('deposit_transactions')
-      .select('id, type, amount, note, sale_id, balance_after, created_at')
+      .select('id, type, amount, note, sale_id, balance_after, created_at, users:confirmed_by(name)')
       .eq('deposit_account_id', account.id)
       .order('created_at', { ascending: false })
 
     if (dbError) return error(res, 'Could not fetch deposit transactions', 500)
-    return success(res, data, 'Deposit transactions fetched')
+
+    const shaped = data.map(({ users, ...rest }) => ({ ...rest, staff_name: users?.name || null }))
+    return success(res, shaped, 'Deposit transactions fetched')
   } catch (err) {
     return error(res, 'Server error', 500)
   }
@@ -75,8 +79,9 @@ router.get('/:id/deposit/transactions', async (req, res) => {
 router.post('/:id/deposit/adjust', requireRole('super_admin', 'admin'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
-    const { amount, note } = req.body
+    const { amount, note, branch_id } = req.body
     if (!amount || amount <= 0) return error(res, 'A valid amount is required')
+    const effectiveBranchId = req.user.role === 'super_admin' ? (branch_id || null) : req.user.branch_id
 
     const { data: customer } = await supabase.from('customers').select('id').eq('id', customer_id).single()
     if (!customer) return error(res, 'Customer not found', 404)
@@ -101,7 +106,7 @@ router.post('/:id/deposit/adjust', requireRole('super_admin', 'admin'), async (r
 
     await supabase.from('deposit_transactions').insert({
       deposit_account_id: account.id, type: 'deposit_in', amount, note: note || null,
-      confirmed_by: req.user.id, balance_after: newBalance
+      confirmed_by: req.user.id, balance_after: newBalance, branch_id: effectiveBranchId
     })
 
     await supabase.from('audit_logs').insert({

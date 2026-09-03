@@ -76,9 +76,11 @@ router.post('/deposit/confirm', async (req, res) => {
       return error(res, 'Unauthorized', 403)
     }
 
-    const { sale_id, amount } = req.body
+    const { sale_id, amount, branch_id } = req.body
     if (!sale_id) return error(res, 'sale_id is required')
     if (!amount || amount <= 0) return error(res, 'A valid amount is required')
+
+    const effectiveBranchId = req.user.role === 'super_admin' ? (branch_id || null) : req.user.branch_id
 
     const { data: sale } = await supabase.from('sales').select('*').eq('id', sale_id).single()
     if (!sale) return error(res, 'Sale not found', 404)
@@ -95,12 +97,12 @@ router.post('/deposit/confirm', async (req, res) => {
     if (balErr) return error(res, 'Could not update deposit balance', 500)
 
     await supabase.from('deposit_transactions').insert({
-      deposit_account_id: account.id, type: 'deposit_out', amount, sale_id, balance_after: newBalance, note: null
+      deposit_account_id: account.id, type: 'deposit_out', amount, sale_id, balance_after: newBalance, note: null, confirmed_by: req.user.id, branch_id: effectiveBranchId
     })
 
     const { data: payment, error: payErr } = await supabase
       .from('payments')
-      .insert({ sale_id, amount, payment_method: 'deposit', confirmed_by: req.user.id })
+      .insert({ sale_id, amount, payment_method: 'deposit', confirmed_by: req.user.id, branch_id: effectiveBranchId })
       .select().single()
 
     if (payErr) return error(res, 'Could not record payment', 500)
