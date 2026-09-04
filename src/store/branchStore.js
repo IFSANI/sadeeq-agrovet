@@ -27,10 +27,25 @@ const useBranchStore = create((set, get) => ({
     }
   },
 
+  
   // Resolves which branch a user is "operating from" and checks if it's
   // the main branch. Cashier/admin use their fixed branch_id. Super admin
   // uses their chosen defaultBranchId, falling back to whichever branch
   // is flagged is_main.
+    // Resolves which branch a super admin is "currently operating from" for
+  // actions that need an explicit branch_id (deposits, credit repayments).
+  // Cashier/admin never need this — their own branch_id is used server-side
+  // automatically. Falls back to the main branch if no default is set.
+  resolveBranchId: (user, defaultBranchId) => {
+    const { branches } = get()
+    if (!user) return null
+    if (user.role === 'super_admin') {
+      return defaultBranchId || branches.find((b) => b.is_main)?.id || null
+    }
+    return user.branch_id || null
+  },
+
+  
   isMainBranchUser: (user, defaultBranchId) => {
     const { branches } = get()
     if (!user || branches.length === 0) return false

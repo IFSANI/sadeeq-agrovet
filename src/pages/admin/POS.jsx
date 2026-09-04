@@ -7,6 +7,7 @@ import { getBranches } from '../../services/branchService'
 import Receipt from '../../components/pos/Receipt'
 import useAuthStore from '../../store/authStore'
 import api from '../../services/api'
+import useBranchStore from '../../store/branchStore'
 import { WifiOff, Clock } from 'lucide-react'
 import useOnlineStatus from '../../hooks/useOnlineStatus'
 import { refreshBranchCache, searchLocalProducts, queueOfflineSale } from '../../services/offlineSync'
@@ -581,6 +582,8 @@ function CustomerPicker({ selectedCustomer, onSelect }) {
 
 // Payment Modal
 function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWholesale, getItemPrice, online, onClose, onSuccess }) {
+  const { user, defaultBranchId } = useAuthStore()
+  const resolveBranchId = useBranchStore((state) => state.resolveBranchId)
   const [method, setMethod] = useState(null)
   const [processing, setProcessing] = useState(false)
   const [creditAccount, setCreditAccount] = useState(customer?.credit_account || null)
@@ -754,7 +757,8 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
       } else if (method === 'Split') {
         paymentRes = await confirmUpfrontPayment(saleId, Number(amountPaidNow), methodNow)
       } else if (method === 'Deposit') {
-        paymentRes = await confirmDepositPayment(saleId, total)
+        const depositBranchId = user?.role === 'super_admin' ? resolveBranchId(user, defaultBranchId) : undefined
+        paymentRes = await confirmDepositPayment(saleId, total, depositBranchId)
       }
 
       if (paymentRes?.success) {

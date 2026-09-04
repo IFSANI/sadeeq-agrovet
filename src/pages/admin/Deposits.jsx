@@ -3,6 +3,7 @@ import { Search, Wallet, User, Plus, X, UserPlus, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
+import useBranchStore from '../../store/branchStore'
 
 const SHOP_NAME = 'SADEEQ AGROVET AND GENERAL MERCHANT'
 
@@ -325,6 +326,8 @@ function RecordDepositModal({ customer, onClose, onSaved }) {
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [reference, setReference] = useState('')
   const [saving, setSaving] = useState(false)
+  const { user, defaultBranchId } = useAuthStore()
+  const resolveBranchId = useBranchStore((state) => state.resolveBranchId)
 
   const balance = Number(customer.deposit_account?.current_balance || 0)
   const methods = ['cash', 'transfer', 'pos']
@@ -335,10 +338,15 @@ function RecordDepositModal({ customer, onClose, onSaved }) {
       toast.error('Enter a valid amount')
       return
     }
+    if (user?.role === 'super_admin' && !resolveBranchId(user, defaultBranchId)) {
+      toast.error('Set a default branch first (from the Branches screen) before recording a deposit')
+      return
+    }
     setSaving(true)
     try {
       const payload = { amount: Number(amount), payment_method: paymentMethod }
       if (reference) payload.reference = reference
+      if (user?.role === 'super_admin') payload.branch_id = resolveBranchId(user, defaultBranchId)
 
       const res = await api.post(`/api/customers/${customer.id}/deposit/add`, payload)
       if (res.data.success) {

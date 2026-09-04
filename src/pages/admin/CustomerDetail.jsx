@@ -4,6 +4,7 @@ import { ArrowLeft, Phone, Mail, MapPin, Wallet, AlertCircle, PlusCircle, Star }
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import useAuthStore from '../../store/authStore'
+import useBranchStore from '../../store/branchStore'
 import useOnlineStatus from '../../hooks/useOnlineStatus'
 import { queueRepayment } from '../../services/offlineSync'
 
@@ -341,6 +342,7 @@ function CustomerDetail() {
                   {t.note && <p className="text-xs text-gray-500 mt-1">{t.note}</p>}
                   <p className="text-xs text-gray-400 mt-0.5">
                     {new Date(t.created_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}
+                    {t.staff_name ? ` · by ${t.staff_name}` : ''}
                   </p>
                 </div>
                 <div className="text-right">
@@ -717,6 +719,8 @@ function RecordDepositModal({ customer, onClose, onSaved }) {
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [reference, setReference] = useState('')
   const [saving, setSaving] = useState(false)
+  const { user, defaultBranchId } = useAuthStore()
+  const resolveBranchId = useBranchStore((state) => state.resolveBranchId)
 
   const balance = Number(customer.deposit_account?.current_balance || 0)
   const methods = ['cash', 'transfer', 'pos']
@@ -727,10 +731,15 @@ function RecordDepositModal({ customer, onClose, onSaved }) {
       toast.error('Enter a valid amount')
       return
     }
+    if (user?.role === 'super_admin' && !resolveBranchId(user, defaultBranchId)) {
+      toast.error('Set a default branch first (from the Branches screen) before recording a deposit')
+      return
+    }
     setSaving(true)
     try {
       const payload = { amount: Number(amount), payment_method: paymentMethod }
       if (reference) payload.reference = reference
+      if (user?.role === 'super_admin') payload.branch_id = resolveBranchId(user, defaultBranchId)
 
       const res = await api.post(`/api/customers/${customer.id}/deposit/add`, payload)
       if (res.data.success) {
@@ -828,6 +837,8 @@ function AdjustDepositModal({ customer, onClose, onSaved }) {
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const { user, defaultBranchId } = useAuthStore()
+  const resolveBranchId = useBranchStore((state) => state.resolveBranchId)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -835,10 +846,15 @@ function AdjustDepositModal({ customer, onClose, onSaved }) {
       toast.error('Enter a valid amount')
       return
     }
+    if (user?.role === 'super_admin' && !resolveBranchId(user, defaultBranchId)) {
+      toast.error('Set a default branch first (from the Branches screen) before recording this')
+      return
+    }
     setSaving(true)
     try {
       const payload = { amount: Number(amount) }
       if (note) payload.note = note
+      if (user?.role === 'super_admin') payload.branch_id = resolveBranchId(user, defaultBranchId)
 
       const res = await api.post(`/api/customers/${customer.id}/deposit/adjust`, payload)
       if (res.data.success) {

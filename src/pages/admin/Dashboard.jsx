@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  ShoppingCart, AlertTriangle, Bird, Wallet, Receipt, Clock
+  ShoppingCart, AlertTriangle, Bird, Wallet, Receipt, Clock, PiggyBank, Landmark
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -27,6 +27,8 @@ function Dashboard() {
   const [loading, setLoading] = useState(true)
 
   const [salesToday, setSalesToday] = useState({ count: 0, total: 0 })
+  const [selectedDate, setSelectedDate] = useState(todayStr())
+  const [collections, setCollections] = useState({ total: 0, breakdown: {} })
   const [recentSales, setRecentSales] = useState([])
   const [lowStock, setLowStock] = useState([])
   const [pendingBookings, setPendingBookings] = useState(null) // null = feature not available here
@@ -83,8 +85,7 @@ function Dashboard() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const today = todayStr()
-      const salesParams = { from: today }
+      const salesParams = { from: selectedDate, to: `${selectedDate}T23:59:59` }
     if (isSuperAdmin) {
       if (selectedBranch) salesParams.branch = selectedBranch
     } else {
@@ -95,12 +96,20 @@ function Dashboard() {
         ? (selectedBranch ? { branch_id: selectedBranch } : {})
         : { branch_id: user?.branch_id }
 
-      const [salesRes, bookingsRes, customersRes, lowStockData, duePaymentsRes] = await Promise.allSettled([
+      const collectionsParams = { date: selectedDate }
+      if (isSuperAdmin) {
+        if (selectedBranch) collectionsParams.branch_id = selectedBranch
+      } else {
+        collectionsParams.branch_id = user?.branch_id
+      }
+
+      const [salesRes, bookingsRes, customersRes, lowStockData, duePaymentsRes, collectionsRes] = await Promise.allSettled([
         api.get('/api/sales', { params: salesParams }),
         api.get('/api/chicks/bookings', { params: { status: 'pending_approval' } }),
         api.get('/api/customers'),
         fetchLowStock(branches),
         api.get('/api/reports/due-payments', { params: duePaymentsParams }),
+        api.get('/api/reports/daily-collections', { params: collectionsParams }),
       ])
 
       if (salesRes.status === 'fulfilled' && salesRes.value.data.success) {
@@ -136,6 +145,12 @@ function Dashboard() {
       } else {
         setDuePayments([])
       }
+
+      if (collectionsRes.status === 'fulfilled' && collectionsRes.value.data.success) {
+        setCollections(collectionsRes.value.data.data)
+      } else {
+        setCollections({ total: 0, breakdown: {} })
+      }
     } catch {
       toast.error('Failed to load dashboard data')
     } finally {
@@ -151,7 +166,7 @@ function Dashboard() {
     setShowAllDuePayments(false)
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBranch, branches.length])
+  }, [selectedBranch, branches.length, selectedDate])
 
   const stats = [
     {
@@ -184,6 +199,34 @@ function Dashboard() {
       icon: Wallet,
       color: 'bg-blue-50 text-blue-600',
     },
+    {
+      label: 'Deposits Received Today',
+      value: `₦${Number(collections.breakdown?.deposits_received || 0).toLocaleString()}`,
+      change: 'New deposit top-ups',
+      icon: PiggyBank,
+      color: 'bg-teal-50 text-teal-600',
+    },
+    {
+      label: 'Credit Repaid Today',
+      value: `₦${Number(collections.breakdown?.credit_repayments || 0).toLocaleString()}`,
+      change: 'Old balances settled today',
+      icon: Receipt,
+      color: 'bg-indigo-50 text-indigo-600',
+    },
+    {
+      label: 'Given Out on Credit Today',
+      value: `₦${Number(collections.breakdown?.credit_given || 0).toLocaleString()}`,
+      change: 'Not yet collected',
+      icon: Clock,
+      color: 'bg-orange-50 text-orange-600',
+    },
+    {
+      label: 'Net Collections Today',
+      value: `₦${Number(collections.total || 0).toLocaleString()}`,
+      change: 'Cash/transfer/POS/deposits to hand over — excludes credit',
+      icon: Landmark,
+      color: 'bg-emerald-50 text-emerald-700',
+    },
   ]
 
   return (
@@ -198,18 +241,27 @@ function Dashboard() {
           </p>
         </div>
 
-        {isSuperAdmin && branches.length > 0 && (
-          <select
-            value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
+        <div className="flex items-center gap-3">
+          <input
+            type="date"
+            value={selectedDate}
+            max={todayStr()}
+            onChange={(e) => setSelectedDate(e.target.value)}
             className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
-          >
-            <option value="">All Branches</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
-        )}
+          />
+          {isSuperAdmin && branches.length > 0 && (
+            <select
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
+            >
+              <option value="">All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {loading ? (

@@ -494,6 +494,30 @@ router.get('/daily-collections', async (req, res) => {
 
     const credit_repayments = (repayments || []).reduce((sum, p) => sum + Number(p.amount), 0)
 
+    let creditSaleQuery = supabase
+      .from('sales')
+      .select('payment_method, total_amount, amount_paid')
+      .eq('status', 'completed')
+      .in('payment_method', ['credit', 'split'])
+      .gte('created_at', startOfDay).lt('created_at', endOfDay)
+    if (branch_id) creditSaleQuery = creditSaleQuery.eq('branch_id', branch_id)
+    const { data: creditSales } = await creditSaleQuery
+
+    let credit_given = 0
+    for (const s of creditSales || []) {
+      if (s.payment_method === 'credit') credit_given += Number(s.total_amount)
+      else credit_given += Number(s.total_amount) - Number(s.amount_paid || 0)
+    }
+
+    let creditBookingQuery = supabase
+      .from('chick_bookings')
+      .select('total_amount')
+      .eq('payment_method', 'credit')
+      .gte('created_at', startOfDay).lt('created_at', endOfDay)
+    if (branch_id) creditBookingQuery = creditBookingQuery.eq('branch_id', branch_id)
+    const { data: creditBookings } = await creditBookingQuery
+    credit_given += (creditBookings || []).reduce((sum, b) => sum + Number(b.total_amount), 0)
+
     const total = cash_sales + transfer_sales + pos_sales + split_upfront + deposits_received + credit_repayments
 
     return success(res, {
@@ -505,7 +529,8 @@ router.get('/daily-collections', async (req, res) => {
         pos_sales: Math.round(pos_sales * 100) / 100,
         split_upfront: Math.round(split_upfront * 100) / 100,
         deposits_received: Math.round(deposits_received * 100) / 100,
-        credit_repayments: Math.round(credit_repayments * 100) / 100
+        credit_repayments: Math.round(credit_repayments * 100) / 100,
+        credit_given: Math.round(credit_given * 100) / 100
       }
     }, 'Daily collections fetched')
   } catch (err) {

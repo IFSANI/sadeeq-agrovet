@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Search, Wallet, User, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import useAuthStore from '../../store/authStore'
+import useBranchStore from '../../store/branchStore'
 import useOnlineStatus from '../../hooks/useOnlineStatus'
 import { queueRepayment } from '../../services/offlineSync'
 
@@ -157,6 +159,8 @@ function RepaymentModal({ customer, online, onClose, onSaved }) {
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [reference, setReference] = useState('')
   const [saving, setSaving] = useState(false)
+  const { user, defaultBranchId } = useAuthStore()
+  const resolveBranchId = useBranchStore((state) => state.resolveBranchId)
 
   const balance = Number(customer.credit_account?.current_balance || 0)
   const methods = ['cash', 'transfer', 'pos']
@@ -171,10 +175,15 @@ function RepaymentModal({ customer, online, onClose, onSaved }) {
       toast.error(`Amount can't exceed the outstanding balance of ₦${balance.toLocaleString()}`)
       return
     }
+    if (user?.role === 'super_admin' && !resolveBranchId(user, defaultBranchId)) {
+      toast.error('Set a default branch first (from the Branches screen) before recording a repayment')
+      return
+    }
     setSaving(true)
     try {
       const payload = { amount: Number(amount), payment_method: paymentMethod }
       if (reference) payload.reference = reference
+      if (user?.role === 'super_admin') payload.branch_id = resolveBranchId(user, defaultBranchId)
 
       if (!online) {
         await queueRepayment(customer.id, payload)
