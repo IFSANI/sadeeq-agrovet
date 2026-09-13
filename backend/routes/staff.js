@@ -80,10 +80,15 @@ router.put('/:id', async (req, res) => {
       return error(res, 'You can only edit staff in your own branch', 403)
     }
 
-    const { name, phone, role } = req.body
+    const { name, email, phone, role } = req.body
     const updates = {}
     if (name !== undefined) updates.name = name
     if (phone !== undefined) updates.phone = phone
+    if (email !== undefined && email !== existing.email) {
+      const { data: emailTaken } = await supabase.from('users').select('id').eq('email', email).neq('id', id).maybeSingle()
+      if (emailTaken) return error(res, 'A staff account with this email already exists')
+      updates.email = email
+    }
     if (role !== undefined) {
       if (req.user.role === 'admin' && role === 'super_admin') return error(res, 'Admins cannot assign super_admin role', 403)
       updates.role = role

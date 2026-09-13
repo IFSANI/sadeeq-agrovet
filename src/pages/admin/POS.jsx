@@ -114,7 +114,7 @@ function POS() {
   }
 
   const updateQty = (id, qty) => {
-    if (qty < 1) return removeFromCart(id)
+    if (qty <= 0) return removeFromCart(id)
     setCartItems(cartItems.map((i) => i.id === id ? { ...i, quantity: qty } : i))
   }
 
@@ -289,6 +289,8 @@ function POS() {
                     </button>
                     <input
                       type="number"
+                      step="0.01"
+                      min="0.01"
                       value={item.quantity}
                       onChange={(e) => updateQty(item.id, Number(e.target.value))}
                       className="w-12 text-center text-sm font-medium border border-gray-200 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
@@ -851,7 +853,9 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         {needsCustomer && customer && !creditAccount && (
           <div className="mb-4 bg-orange-50 rounded-xl p-4 text-sm text-orange-700">
             <p className="font-medium mb-2">{customer.name} has no credit account yet.</p>
-            {!showOpenCredit ? (
+            {user?.role !== 'super_admin' ? (
+              <p className="text-xs">Ask a super admin to open one.</p>
+            ) : !showOpenCredit ? (
               <button
                 type="button"
                 onClick={() => setShowOpenCredit(true)}

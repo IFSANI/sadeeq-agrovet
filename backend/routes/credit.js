@@ -16,7 +16,7 @@ router.get('/:id/credit', requireRole('super_admin', 'admin', 'cashier'), async 
   }
 })
 
-router.put('/:id/credit/limit', requireRole('super_admin', 'admin', 'cashier'), async (req, res) => {
+router.put('/:id/credit/limit', requireRole('super_admin'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
     const { credit_limit } = req.body
@@ -47,7 +47,7 @@ router.put('/:id/credit/limit', requireRole('super_admin', 'admin', 'cashier'), 
   }
 })
 
-router.put('/:id/credit/activate', requireRole('super_admin', 'admin'), async (req, res) => {
+router.put('/:id/credit/activate', requireRole('super_admin'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
     const { data: account } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
@@ -63,7 +63,7 @@ router.put('/:id/credit/activate', requireRole('super_admin', 'admin'), async (r
   }
 })
 
-router.put('/:id/credit/suspend', requireRole('super_admin', 'admin'), async (req, res) => {
+router.put('/:id/credit/suspend', requireRole('super_admin'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
     const { data: account } = await supabase.from('credit_accounts').select('*').eq('customer_id', customer_id).maybeSingle()
@@ -140,7 +140,7 @@ router.post('/:id/credit/repay', requireRole('super_admin', 'admin', 'cashier'),
     return error(res, 'Server error', 500)
   }
 })
-router.post('/:id/credit/adjust', requireRole('super_admin', 'admin'), async (req, res) => {
+router.post('/:id/credit/adjust', requireRole('super_admin'), async (req, res) => {
   try {
     const { id: customer_id } = req.params
     const { amount, note, credit_limit } = req.body

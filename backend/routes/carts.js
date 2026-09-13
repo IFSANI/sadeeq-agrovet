@@ -173,7 +173,6 @@ router.put('/:id/close', async (req, res) => {
   try {
     const { id: cart_id } = req.params
     const { payment_method, customer_id, items } = req.body
-    if (!payment_method) return error(res, 'payment_method is required')
 
     const { data: cart } = await supabase.from('loose_sale_carts').select('*, cart_items(*)').eq('id', cart_id).single()
     if (!cart) return error(res, 'Cart not found', 404)
@@ -209,7 +208,25 @@ router.put('/:id/close', async (req, res) => {
       .map(item => ({ ...item, sold: Number(item.initial_quantity) - Number(item.remaining_quantity) }))
       .filter(item => item.sold > 0)
 
-    if (soldItems.length === 0) return error(res, 'Nothing was sold from this cart')
+    if (soldItems.length === 0) {
+      for (const item of cart.cart_items) {
+        const { data: stockRow } = await supabase.from('stock').select('*').eq('branch_id', cart.branch_id).eq('product_id', item.product_id).maybeSingle()
+        if (stockRow) {
+          await supabase.from('stock').update({ quantity: Number(stockRow.quantity) + Number(item.remaining_quantity), updated_at: new Date() }).eq('id', stockRow.id)
+        }
+      }
+
+      const { data: closedCart, error: closeErr } = await supabase
+        .from('loose_sale_carts').update({ status: 'closed', closed_at: new Date(), sale_id: null }).eq('id', cart_id).select().single()
+
+      if (closeErr) return error(res, 'Could not close cart', 500)
+
+      await supabase.from('audit_logs').insert({ user_id: req.user.id, action: 'close_empty', entity_type: 'loose_sale_cart', entity_id: cart_id, new_value: closedCart })
+
+      return success(res, { cart: closedCart, sale: null }, 'Cart closed — nothing was sold, all stock returned')
+    }
+
+    if (!payment_method) return error(res, 'payment_method is required')
 
     const total_amount = soldItems.reduce((sum, i) => sum + (i.sold * Number(i.unit_price)), 0)
 

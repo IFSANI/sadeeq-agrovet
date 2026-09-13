@@ -19,6 +19,7 @@ function CustomerDetail() {
   const [loadingTransactions, setLoadingTransactions] = useState(true)
   const [showRepay, setShowRepay] = useState(false)
   const [showAdjust, setShowAdjust] = useState(false)
+  const [showOpenCredit, setShowOpenCredit] = useState(false)
   const [depositTransactions, setDepositTransactions] = useState([])
   const [loadingDepositTransactions, setLoadingDepositTransactions] = useState(true)
   const [showRecordDeposit, setShowRecordDeposit] = useState(false)
@@ -26,6 +27,7 @@ function CustomerDetail() {
   const [togglingSpecial, setTogglingSpecial] = useState(false)
   const { user } = useAuthStore()
   const canAdjustDebt = user?.role === 'admin' || user?.role === 'super_admin'
+  const canManageCredit = user?.role === 'super_admin'
   const { online } = useOnlineStatus()
 
   const handleToggleSpecial = async () => {
@@ -185,7 +187,7 @@ function CustomerDetail() {
             <Wallet size={18} className="text-gray-500" />
             <h2 className="font-semibold text-gray-700">Credit Account</h2>
           </div>
-          {canAdjustDebt && (
+          {canManageCredit && (
             <button
               onClick={() => setShowAdjust(true)}
               className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700"
@@ -197,9 +199,20 @@ function CustomerDetail() {
         </div>
 
         {!account ? (
-          <p className="text-gray-400 text-sm">
-            No credit account yet — one gets opened automatically the first time this customer uses Credit or Split payment at checkout, or when historical debt is added.
-          </p>
+          <div>
+            <p className="text-gray-400 text-sm mb-3">
+              No credit account yet — one gets opened automatically the first time this customer uses Credit or Split payment at checkout, or when historical debt is added.
+            </p>
+            {canManageCredit && (
+              <button
+                onClick={() => setShowOpenCredit(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700"
+              >
+                <PlusCircle size={14} />
+                Open Credit Account
+              </button>
+            )}
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -432,6 +445,18 @@ function CustomerDetail() {
         />
       )}
 
+      {showOpenCredit && (
+        <OpenCreditModal
+          customer={customer}
+          onClose={() => setShowOpenCredit(false)}
+          onSaved={() => {
+            setShowOpenCredit(false)
+            fetchCustomer()
+            fetchTransactions()
+          }}
+        />
+      )}
+
       {showRecordDeposit && (
         <RecordDepositModal
           customer={customer}
@@ -563,6 +588,79 @@ function AdjustDebtModal({ customer, onClose, onSaved }) {
             </button>
           </div>
 
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function OpenCreditModal({ customer, onClose, onSaved }) {
+  const [creditLimit, setCreditLimit] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!creditLimit || Number(creditLimit) <= 0) {
+      toast.error('Enter a valid credit limit')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await api.put(`/api/customers/${customer.id}/credit/limit`, {
+        credit_limit: Number(creditLimit),
+      })
+      if (res.data.success) {
+        toast.success('Credit account opened!')
+        onSaved()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to open credit account')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-800">Open Credit Account</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          Sets a credit limit for {customer.name} with no starting balance owed.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Credit Limit (₦) *</label>
+            <input
+              type="number"
+              value={creditLimit}
+              onChange={(e) => setCreditLimit(e.target.value)}
+              placeholder="e.g. 50000"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-60"
+            >
+              {saving ? 'Opening...' : 'Open Account'}
+            </button>
+          </div>
         </form>
       </div>
     </div>
