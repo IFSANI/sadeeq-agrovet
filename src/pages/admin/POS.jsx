@@ -118,11 +118,17 @@ function POS() {
     setCartItems(cartItems.map((i) => i.id === id ? { ...i, quantity: qty } : i))
   }
 
+  const setQtyInput = (id, rawValue) => {
+    setCartItems(cartItems.map((i) => i.id === id ? { ...i, quantity: rawValue } : i))
+  }
+
   const removeFromCart = (id) => {
     setCartItems(cartItems.filter((i) => i.id !== id))
   }
 
-  const total = cartItems.reduce((sum, i) => sum + getItemPrice(i) * i.quantity, 0)
+  const hasInvalidQty = cartItems.some((i) => !(Number(i.quantity) > 0))
+
+  const total = cartItems.reduce((sum, i) => sum + getItemPrice(i) * (Number(i.quantity) || 0), 0)
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full">
@@ -292,7 +298,7 @@ function POS() {
                       step="0.01"
                       min="0.01"
                       value={item.quantity}
-                      onChange={(e) => updateQty(item.id, Number(e.target.value))}
+                      onChange={(e) => setQtyInput(item.id, e.target.value)}
                       className="w-12 text-center text-sm font-medium border border-gray-200 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
                     />
                     <button
@@ -303,7 +309,7 @@ function POS() {
                     </button>
                   </div>
                   <p className="text-sm font-bold text-gray-800 w-24 text-right">
-                    ₦{(getItemPrice(item) * item.quantity).toLocaleString()}
+                    ₦{(getItemPrice(item) * (Number(item.quantity) || 0)).toLocaleString()}
                   </p>
                   <button
                     onClick={() => removeFromCart(item.id)}
@@ -364,13 +370,18 @@ function POS() {
                 toast.error('Add items to cart first')
                 return
               }
+              if (hasInvalidQty) {
+                toast.error('Enter a valid quantity (greater than 0) for every item before proceeding')
+                return
+              }
               if (!activeBranchId) {
                 toast.error('Please select a branch first')
                 return
               }
               setShowPayment(true)
             }}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition"
+            disabled={hasInvalidQty}
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Proceed to Payment
           </button>
