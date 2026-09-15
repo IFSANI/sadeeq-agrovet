@@ -670,6 +670,11 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
   const handleCompleteSale = async () => {
     if (!method) return
 
+    if (!online && user?.role === 'super_admin' && branchId !== user?.branch_id) {
+      toast.error('You need an internet connection to sell for a branch you\'re not assigned to.')
+      return
+    }
+
     if (needsCustomer && !customer) {
       toast.error('Select a customer first for credit/split payment')
       return
@@ -739,7 +744,7 @@ function PaymentModal({ cartItems, total, branchId, cashierId, customer, isWhole
         toast.success('Sale saved offline — will sync automatically once reconnected')
         onSuccess({
           ...salePayload,
-          id: 'PENDING',
+          id: salePayload.offline_id,
           created_at: new Date().toISOString(),
           payment_status: 'pending_sync',
           sale_items: salePayload.items.map((i) => ({

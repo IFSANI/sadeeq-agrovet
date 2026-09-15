@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Package, ShoppingCart, Users,
   GitBranch, Truck, BarChart2, Settings,
   ChevronLeft, Menu, X, LogOut, Bird,
-  Wallet, Receipt, ArrowLeftRight
+  Wallet, Receipt, ArrowLeftRight, PackageCheck
 } from 'lucide-react'
 import useAuthStore from '../../store/authStore'
 import useBranchStore from '../../store/branchStore'
@@ -48,6 +48,7 @@ const navItems = [
       { label: 'Staff', icon: Users, path: '/admin/staff', roles: ['super_admin'] },
       { label: 'Credit & Debt', icon: Wallet, path: '/admin/credit', roles: ['super_admin', 'admin'] },
       { label: 'Deposits', icon: Wallet, path: '/admin/deposits', roles: ['super_admin', 'admin'] },
+      { label: 'Pending Collections', icon: PackageCheck, path: '/admin/collections', roles: ['super_admin', 'admin'] },
     ]
   },
   {

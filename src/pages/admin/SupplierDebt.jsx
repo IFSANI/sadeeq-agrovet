@@ -42,6 +42,18 @@ function SupplierDebt() {
     fetchSuppliers()
   }, [filter])
 
+  const fetchDetail = async (receiptId) => {
+    setLoadingDetail(true)
+    try {
+      const res = await api.get(`/api/stock/restock/${receiptId}`)
+      if (res.data.success) setExpandedDetail(res.data.data)
+    } catch {
+      toast.error('Failed to load restock detail')
+    } finally {
+      setLoadingDetail(false)
+    }
+  }
+
   const toggleExpand = async (receiptId) => {
     if (expandedId === receiptId) {
       setExpandedId(null)
@@ -49,15 +61,7 @@ function SupplierDebt() {
       return
     }
     setExpandedId(receiptId)
-    setLoadingDetail(true)
-    try {
-      const res = await api.get(`/api/stock/restock/${receiptId}`)
-      if (res.data.success) setExpandedDetail(res.data.data)
-    } catch {
-      toast.error('Failed to load payment history')
-    } finally {
-      setLoadingDetail(false)
-    }
+    await fetchDetail(receiptId)
   }
   const totalOwed = receipts.reduce(
     (sum, r) => sum + (Number(r.total_cost || 0) - Number(r.amount_paid || 0)), 0
@@ -174,7 +178,14 @@ function SupplierDebt() {
                             </div>
                           ) : (
                             <div>
-                              <p className="text-xs font-semibold text-gray-500 mb-2">Payment History</p>
+                              <p className="text-xs font-semibold text-gray-500 mb-2">Items</p>
+                              <RestockItemsSection
+                                items={expandedDetail?.stock_receipt_items}
+                                receiptId={r.id}
+                                isSuperAdmin={isSuperAdmin}
+                                onCorrected={() => { fetchDetail(r.id); fetchReceipts() }}
+                              />
+                              <p className="text-xs font-semibold text-gray-500 mb-2 mt-4">Payment History</p>
                               {(!expandedDetail?.payments || expandedDetail.payments.length === 0) ? (
                                 <p className="text-xs text-gray-400">No payments recorded yet</p>
                               ) : (
@@ -234,6 +245,115 @@ function SupplierDebt() {
         />
       )}
 
+    </div>
+  )
+}
+
+function RestockItemsSection({ items, receiptId, isSuperAdmin, onCorrected }) {
+  const [editingId, setEditingId] = useState(null)
+  const [qtyInput, setQtyInput] = useState('')
+  const [costInput, setCostInput] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  if (!items || items.length === 0) {
+    return <p className="text-xs text-gray-400">No items recorded</p>
+  }
+
+  const startEdit = (item) => {
+    setEditingId(item.id)
+    setQtyInput(item.quantity)
+    setCostInput(item.cost_price)
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setQtyInput('')
+    setCostInput('')
+  }
+
+  const saveEdit = async (itemId) => {
+    if (!qtyInput || Number(qtyInput) <= 0) {
+      toast.error('Enter a valid quantity')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await api.put(`/api/stock/restock/${receiptId}/items/${itemId}`, {
+        quantity: Number(qtyInput),
+        cost_price: Number(costInput),
+      })
+      if (res.data.success) {
+        toast.success('Item corrected')
+        if (res.data.data?.warning) toast(res.data.data.warning, { icon: '⚠️' })
+        cancelEdit()
+        onCorrected()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to correct item')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {items.map((item) => (
+        <div key={item.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-2 border border-gray-100">
+          {editingId === item.id ? (
+            <div className="flex items-center gap-2 flex-1">
+              <span className="text-gray-700 flex-1">{item.products?.name}</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={qtyInput}
+                onChange={(e) => setQtyInput(e.target.value)}
+                className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-xs"
+                placeholder="Qty"
+              />
+              <span className="text-gray-400">x</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={costInput}
+                onChange={(e) => setCostInput(e.target.value)}
+                className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-xs"
+                placeholder="Cost"
+              />
+              <button
+                onClick={() => saveEdit(item.id)}
+                disabled={saving}
+                className="text-green-600 font-semibold hover:text-green-700 disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600">
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <>
+              <span className="text-gray-700">
+                {item.products?.name} · {item.quantity} x ₦{Number(item.cost_price).toLocaleString()}
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-gray-800">
+                  ₦{(Number(item.quantity) * Number(item.cost_price)).toLocaleString()}
+                </span>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => startEdit(item)}
+                    className="text-blue-600 font-semibold hover:text-blue-700"
+                  >
+                    Correct
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

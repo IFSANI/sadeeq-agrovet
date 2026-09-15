@@ -7,6 +7,26 @@ const router = express.Router()
 router.use(requireAuth)
 router.use(requireRole('super_admin', 'admin', 'cashier'))
 
+router.get('/pending-collection', async (req, res) => {
+  try {
+    let { branch_id } = req.query
+    if (req.user.role !== 'super_admin') branch_id = req.user.branch_id
+    if (!branch_id) return error(res, 'branch_id is required')
+
+    const { data, error: dbError } = await supabase
+      .from('sales')
+      .select('*, customers(name, phone), sale_items(*, products(name)), users:cashier_id(name)')
+      .eq('branch_id', branch_id)
+      .eq('collection_status', 'pending')
+      .order('created_at', { ascending: false })
+
+    if (dbError) return error(res, 'Could not fetch pending collections', 500)
+    return success(res, data, 'Pending collections fetched')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
 router.get('/today', async (req, res) => {
   try {
     let { branch } = req.query
@@ -127,7 +147,8 @@ router.post('/', async (req, res) => {
       payment_status: payment_method === 'credit' ? 'paid' : 'pending',
       status: 'completed',
       sale_type: 'regular',
-      offline_id: offline_id || null
+      offline_id: offline_id || null,
+      collection_status: (req.user.role === 'super_admin' && branch_id !== req.user.branch_id) ? 'pending' : 'collected'
     })
     .select().single()
 
@@ -196,6 +217,9 @@ router.put('/:id/void', requireRole('super_admin', 'admin'), async (req, res) =>
     const { data: sale } = await supabase.from('sales').select('*, sale_items(*)').eq('id', id).single()
     if (!sale) return error(res, 'Sale not found', 404)
     if (sale.status === 'voided') return error(res, 'Sale is already voided')
+    if (sale.collection_status === 'collected') {
+      return error(res, 'This sale has already been collected and cannot be voided')
+    }
 
     for (const item of sale.sale_items) {
       const { data: stockRow } = await supabase.from('stock').select('*').eq('branch_id', sale.branch_id).eq('product_id', item.product_id).maybeSingle()
@@ -224,6 +248,33 @@ router.put('/:id/void', requireRole('super_admin', 'admin'), async (req, res) =>
     return error(res, 'Server error', 500)
   }
 })
+router.put('/:id/collect', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { data: sale } = await supabase.from('sales').select('id, branch_id, collection_status').eq('id', id).single()
+    if (!sale) return error(res, 'Sale not found', 404)
+
+    if (req.user.role !== 'super_admin' && sale.branch_id !== req.user.branch_id) {
+      return error(res, 'This sale belongs to a different branch', 403)
+    }
+
+    if (sale.collection_status === 'collected') {
+      return error(res, 'This has already been marked as collected')
+    }
+
+    const { data: updated, error: dbError } = await supabase
+      .from('sales')
+      .update({ collection_status: 'collected' })
+      .eq('id', id)
+      .select().single()
+
+    if (dbError) return error(res, 'Could not mark as collected', 500)
+    return success(res, updated, 'Marked as collected')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
 router.get('/credit-due', async (req, res) => {
   try {
     let { branch } = req.query

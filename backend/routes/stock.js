@@ -180,6 +180,77 @@ router.post('/restock/:id/pay', requireRole('super_admin', 'admin'), async (req,
     return error(res, 'Server error', 500)
   }
 })
+router.put('/restock/:id/items/:itemId', requireRole('super_admin'), async (req, res) => {
+  try {
+    const { id, itemId } = req.params
+    const { quantity, cost_price } = req.body
+
+    if (quantity === undefined && cost_price === undefined) {
+      return error(res, 'Provide a new quantity and/or cost_price to correct')
+    }
+    if (quantity !== undefined && Number(quantity) <= 0) return error(res, 'quantity must be greater than 0')
+    if (cost_price !== undefined && Number(cost_price) < 0) return error(res, 'cost_price cannot be negative')
+
+    const { data: item } = await supabase.from('stock_receipt_items').select('*').eq('id', itemId).eq('stock_receipt_id', id).single()
+    if (!item) return error(res, 'Restock item not found', 404)
+
+    const { data: receipt } = await supabase.from('stock_receipts').select('*').eq('id', id).single()
+    if (!receipt) return error(res, 'Stock receipt not found', 404)
+
+    const newQuantity = quantity !== undefined ? Number(quantity) : Number(item.quantity)
+    const newCostPrice = cost_price !== undefined ? Number(cost_price) : Number(item.cost_price)
+    const quantityDelta = newQuantity - Number(item.quantity)
+
+    if (quantityDelta !== 0 && receipt.branch_id) {
+      const { data: stockRow } = await supabase.from('stock').select('*').eq('branch_id', receipt.branch_id).eq('product_id', item.product_id).maybeSingle()
+      const currentQty = Number(stockRow?.quantity || 0)
+      const adjustedQty = currentQty + quantityDelta
+
+      if (adjustedQty < 0) {
+        return error(res, `Can't apply this correction — it would take stock on hand negative (currently ${currentQty}, this needs to remove ${-quantityDelta}). Some of the extra units may already be sold; reconcile stock manually first.`)
+      }
+
+      if (stockRow) {
+        await supabase.from('stock').update({ quantity: adjustedQty, updated_at: new Date() }).eq('id', stockRow.id)
+      }
+    }
+
+    const { data: updatedItem, error: itemErr } = await supabase
+      .from('stock_receipt_items')
+      .update({ quantity: newQuantity, cost_price: newCostPrice })
+      .eq('id', itemId).select().single()
+
+    if (itemErr) return error(res, 'Could not update restock item', 500)
+
+    const { data: allItems } = await supabase.from('stock_receipt_items').select('quantity, cost_price').eq('stock_receipt_id', id)
+    const newTotalCost = (allItems || []).reduce((sum, i) => sum + Number(i.quantity) * Number(i.cost_price), 0)
+    const newPaymentStatus = Number(receipt.amount_paid) >= newTotalCost
+      ? 'paid'
+      : (Number(receipt.amount_paid) > 0 ? 'partial' : 'unpaid')
+
+    const { data: updatedReceipt, error: receiptErr } = await supabase
+      .from('stock_receipts')
+      .update({ total_cost: newTotalCost, payment_status: newPaymentStatus })
+      .eq('id', id).select().single()
+
+    if (receiptErr) return error(res, 'Could not update receipt total', 500)
+
+    await supabase.from('audit_logs').insert({
+      user_id: req.user.id, action: 'correct_restock_item', entity_type: 'stock_receipt_item', entity_id: itemId,
+      old_value: item, new_value: updatedItem
+    })
+
+    const overpaid = Number(receipt.amount_paid) > newTotalCost
+    return success(res, {
+      item: updatedItem,
+      receipt: updatedReceipt,
+      warning: overpaid ? `Amount already paid (₦${receipt.amount_paid}) now exceeds the corrected total (₦${newTotalCost}) — the supplier may be owed a refund or credit.` : null
+    }, 'Restock item corrected')
+  } catch (err) {
+    return error(res, 'Server error', 500)
+  }
+})
+
 router.get('/restock/:id', async (req, res) => {
   try {
     const { id } = req.params
