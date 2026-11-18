@@ -373,18 +373,11 @@ function RestockModal({ branches, suppliers, defaultBranchId, isSuperAdmin, user
               {items.map((item, index) => (
                 <div key={index} className="flex gap-2 items-start">
                   <div className="flex-1 space-y-2">
-                    <select
+                    <ProductPicker
+                      products={products}
                       value={item.product_id}
-                      onChange={(e) => updateItem(index, 'product_id', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                    >
-                      <option value="">Select product</option>
-                      {products.map((p) => (
-                        <option key={p.product_id} value={p.product_id}>
-                          {p.products?.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(id) => updateItem(index, 'product_id', id)}
+                    />
                     <div className="flex gap-2">
                       <input
                         type="number"
@@ -615,18 +608,13 @@ function TransferModal({ branches, defaultFromBranchId, isSuperAdmin, userBranch
             <div className="space-y-3">
               {items.map((item, index) => (
                 <div key={index} className="flex gap-2 items-center">
-                  <select
-                    value={item.product_id}
-                    onChange={(e) => updateItem(index, 'product_id', e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                  >
-                    <option value="">Select product</option>
-                    {products.map((p) => (
-                      <option key={p.product_id} value={p.product_id}>
-                        {p.products?.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex-1">
+                    <ProductPicker
+                      products={products}
+                      value={item.product_id}
+                      onChange={(id) => updateItem(index, 'product_id', id)}
+                    />
+                  </div>
                   <input
                     type="number"
                     placeholder="Qty"
@@ -689,5 +677,43 @@ function TransferModal({ branches, defaultFromBranchId, isSuperAdmin, userBranch
     </div>
   )
 }
+function ProductPicker({ products, value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const selected = products.find((p) => p.product_id === value)
+  const filtered = products.filter((p) =>
+    p.products?.name?.toLowerCase().includes(query.toLowerCase())
+  )
 
+  return (
+    <div className="relative">
+      <input
+        value={open ? query : (selected?.products?.name || '')}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+        onFocus={() => { setQuery(''); setOpen(true) }}
+        onBlur={() => setOpen(false)}
+        placeholder="Search product..."
+        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+      />
+      {open && (
+        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-2 text-sm text-gray-400">No match</p>
+          ) : (
+            filtered.map((p) => (
+              <button
+                type="button"
+                key={p.product_id}
+                onMouseDown={() => { onChange(p.product_id); setOpen(false) }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-green-50"
+              >
+                {p.products?.name}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 export default Stock
